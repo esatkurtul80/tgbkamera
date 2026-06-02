@@ -1,0 +1,9 @@
+runConfig:
+  runtime: nodejs22
+
+outputFiles:
+  - ".next"
+  - "public"
+  - "node_modules"
+  - "package.json"
+  - "next.config.ts"
