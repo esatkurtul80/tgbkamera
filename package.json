@@ -1,0 +1,28 @@
+{
+  "name": "tgbkamera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TGB Kamera Monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:admin": "turbo run dev --filter=@tgbkamera/admin",
+    "dev:mobile": "turbo run start --filter=@tgbkamera/mobile",
+    "build": "turbo run build",
+    "build:admin": "turbo run build --filter=@tgbkamera/admin",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "clean": "turbo clean"
+  },
+  "packageManager": "npm@10.9.0",
+  "devDependencies": {
+    "turbo": "latest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
