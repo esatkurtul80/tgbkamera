@@ -38,7 +38,7 @@ export default function SoruDuzenlePage() {
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="w-full">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/sorular" className="text-sm text-slate-500 hover:text-slate-700">Sorular</Link>
         <span className="text-slate-300">/</span>

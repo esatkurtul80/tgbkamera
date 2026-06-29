@@ -1,13 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Pencil, Trash2, Search, Plus, Eye, Check } from "lucide-react";
+import { FileText, Pencil, Trash2, Search, Plus, Eye, Check, BarChart2, Target } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import { getFormlar, deleteForm, createForm, getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
-import type { Form, Bolum, Soru } from "@/types";
+import type { Form, Bolum, Soru, SkorlamaSistemi } from "@/types";
+
+const SKORLAMA_SECENEKLER: { value: SkorlamaSistemi; label: string; aciklama: string }[] = [
+  {
+    value: "esik",
+    label: "Eşik Bazlı",
+    aciklama: "Hedef yüzdeye ulaşıldığında tam puan, ulaşılamadığında 0 puan.",
+  },
+  {
+    value: "oran",
+    label: "Oran Bazlı",
+    aciklama: "Evet oranı direkt puan olur, bölüm puanı soruların ortalamasıdır.",
+  },
+];
 
 export default function FormlarPage() {
   const [formlar, setFormlar] = useState<Form[]>([]);
@@ -21,6 +34,7 @@ export default function FormlarPage() {
   const [yeniAd, setYeniAd] = useState("");
   const [yeniAciklama, setYeniAciklama] = useState("");
   const [yeniPuanli, setYeniPuanli] = useState(true);
+  const [yeniSkorlamaSistemi, setYeniSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [yeniBolumler, setYeniBolumler] = useState<Bolum[]>([]);
   const [yeniSeciliIds, setYeniSeciliIds] = useState<string[]>([]);
   const [yeniBolumAra, setYeniBolumAra] = useState("");
@@ -38,6 +52,7 @@ export default function FormlarPage() {
   const [editAd, setEditAd] = useState("");
   const [editAciklama, setEditAciklama] = useState("");
   const [editPuanli, setEditPuanli] = useState(true);
+  const [editSkorlamaSistemi, setEditSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [editBolumler, setEditBolumler] = useState<Bolum[]>([]);
   const [editSeciliIds, setEditSeciliIds] = useState<string[]>([]);
   const [editBolumAra, setEditBolumAra] = useState("");
@@ -53,7 +68,8 @@ export default function FormlarPage() {
   useEffect(() => { load(); }, []);
 
   async function openYeni() {
-    setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
+    setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniSkorlamaSistemi("esik");
+    setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
     const b = await getBolumler();
     setYeniBolumler(b);
     setYeniAcik(true);
@@ -63,7 +79,13 @@ export default function FormlarPage() {
     e.preventDefault();
     if (!yeniAd.trim()) { setYeniError("Form adı boş bırakılamaz."); return; }
     setYeniSaving(true);
-    await createForm({ ad: yeniAd.trim(), aciklama: yeniAciklama.trim(), puanli: yeniPuanli, bolumIdleri: yeniSeciliIds });
+    await createForm({
+      ad: yeniAd.trim(),
+      aciklama: yeniAciklama.trim(),
+      puanli: yeniPuanli,
+      skorlamaSistemi: yeniPuanli ? yeniSkorlamaSistemi : undefined,
+      bolumIdleri: yeniSeciliIds,
+    });
     setYeniSaving(false);
     setYeniAcik(false);
     load();
@@ -88,7 +110,11 @@ export default function FormlarPage() {
     setEditLoading(true);
     setEditError(""); setEditBolumAra("");
     const [f, tumBolumler] = await Promise.all([getForm(id), getBolumler()]);
-    if (f) { setEditAd(f.ad); setEditAciklama(f.aciklama); setEditPuanli(f.puanli); setEditSeciliIds(f.bolumIdleri); }
+    if (f) {
+      setEditAd(f.ad); setEditAciklama(f.aciklama); setEditPuanli(f.puanli);
+      setEditSkorlamaSistemi(f.skorlamaSistemi ?? "esik");
+      setEditSeciliIds(f.bolumIdleri);
+    }
     setEditBolumler(tumBolumler);
     setEditLoading(false);
   }
@@ -97,7 +123,13 @@ export default function FormlarPage() {
     e.preventDefault();
     if (!editId || !editAd.trim()) { setEditError("Form adı boş bırakılamaz."); return; }
     setEditSaving(true);
-    await updateForm(editId, { ad: editAd.trim(), aciklama: editAciklama.trim(), puanli: editPuanli, bolumIdleri: editSeciliIds });
+    await updateForm(editId, {
+      ad: editAd.trim(),
+      aciklama: editAciklama.trim(),
+      puanli: editPuanli,
+      skorlamaSistemi: editPuanli ? editSkorlamaSistemi : undefined,
+      bolumIdleri: editSeciliIds,
+    });
     setEditSaving(false);
     setEditId(null);
     load();
@@ -117,7 +149,9 @@ export default function FormlarPage() {
     f.aciklama?.toLowerCase().includes(ara.toLowerCase())
   );
 
-  function BolumCheckList({ bolumler, seciliIds, onToggle, araVal, onAraChange }: {
+  function BolumCheckList({
+    bolumler, seciliIds, onToggle, araVal, onAraChange,
+  }: {
     bolumler: Bolum[]; seciliIds: string[]; onToggle: (id: string) => void;
     araVal: string; onAraChange: (v: string) => void;
   }) {
@@ -125,7 +159,9 @@ export default function FormlarPage() {
     return (
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">Bölüm Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></p>
+          <p className="text-sm font-medium text-slate-700">
+            Bölüm Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span>
+          </p>
           {bolumler.length > 4 && (
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -135,7 +171,9 @@ export default function FormlarPage() {
           )}
         </div>
         {bolumler.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz bölüm yok. Önce bölüm oluşturun.</p>
+          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">
+            Henüz bölüm yok. Önce bölüm oluşturun.
+          </p>
         ) : (
           <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-52 overflow-y-auto">
             {filtreli.map((bolum) => {
@@ -153,6 +191,44 @@ export default function FormlarPage() {
             })}
           </div>
         )}
+      </div>
+    );
+  }
+
+  function SkorlamaSecimi({
+    value, onChange,
+  }: {
+    value: SkorlamaSistemi; onChange: (v: SkorlamaSistemi) => void;
+  }) {
+    return (
+      <div>
+        <p className="text-sm font-medium text-slate-700 mb-2">Skorlama Sistemi</p>
+        <div className="grid grid-cols-2 gap-2">
+          {SKORLAMA_SECENEKLER.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => onChange(s.value)}
+              className={`flex flex-col items-start gap-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                value === s.value
+                  ? "border-indigo-600 bg-indigo-50"
+                  : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {s.value === "esik" ? (
+                  <Target size={13} className={value === s.value ? "text-indigo-600" : "text-slate-400"} />
+                ) : (
+                  <BarChart2 size={13} className={value === s.value ? "text-indigo-600" : "text-slate-400"} />
+                )}
+                <span className={`text-sm font-semibold ${value === s.value ? "text-indigo-700" : "text-slate-700"}`}>
+                  {s.label}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">{s.aciklama}</p>
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -180,9 +256,12 @@ export default function FormlarPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
+          <div className="flex justify-center py-16">
+            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          </div>
         ) : filtrelenmis.length === 0 ? (
-          <EmptyState icon={FileText} title={ara ? "Eşleşen form bulunamadı" : "Henüz form yok"} description={ara ? "Arama teriminizi değiştirin." : "Yeni form eklemek için sağ üstteki butona tıklayın."} />
+          <EmptyState icon={FileText} title={ara ? "Eşleşen form bulunamadı" : "Henüz form yok"}
+            description={ara ? "Arama teriminizi değiştirin." : "Yeni form eklemek için sağ üstteki butona tıklayın."} />
         ) : (
           <table className="w-full">
             <thead>
@@ -191,7 +270,8 @@ export default function FormlarPage() {
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Form Adı</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Açıklama</th>
                 <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Tip</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">Bölüm Sayısı</th>
+                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">Skorlama</th>
+                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Bölüm</th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">İşlemler</th>
               </tr>
             </thead>
@@ -203,7 +283,16 @@ export default function FormlarPage() {
                   <td className="px-4 py-3.5 text-sm text-slate-500 truncate max-w-xs">
                     {form.aciklama || <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-4 py-3.5 text-center"><Badge variant={form.puanli ? "puanli" : "puansiz"} /></td>
+                  <td className="px-4 py-3.5 text-center">
+                    <Badge variant={form.puanli ? "puanli" : "puansiz"} />
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    {form.puanli && form.skorlamaSistemi ? (
+                      <Badge variant={form.skorlamaSistemi} />
+                    ) : (
+                      <span className="text-slate-300 text-xs">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3.5 text-center">
                     <span className="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full">
                       {form.bolumIdleri.length}
@@ -259,6 +348,9 @@ export default function FormlarPage() {
               ))}
             </div>
           </div>
+          {yeniPuanli && (
+            <SkorlamaSecimi value={yeniSkorlamaSistemi} onChange={setYeniSkorlamaSistemi} />
+          )}
           <BolumCheckList bolumler={yeniBolumler} seciliIds={yeniSeciliIds}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
             araVal={yeniBolumAra} onAraChange={setYeniBolumAra} />
@@ -279,9 +371,12 @@ export default function FormlarPage() {
           <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
         ) : detayForm ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 flex-wrap">
               <Badge variant={detayForm.puanli ? "puanli" : "puansiz"} />
-              {detayForm.aciklama && <p className="text-sm text-slate-500">{detayForm.aciklama}</p>}
+              {detayForm.puanli && detayForm.skorlamaSistemi && (
+                <Badge variant={detayForm.skorlamaSistemi} />
+              )}
+              {detayForm.aciklama && <p className="text-sm text-slate-500 ml-1">{detayForm.aciklama}</p>}
             </div>
             {detayForm.bolumIdleri.length === 0 ? (
               <p className="text-sm text-slate-400 py-6 text-center">Bu forma henüz bölüm atanmamış.</p>
@@ -304,7 +399,16 @@ export default function FormlarPage() {
                             <div key={soruId} className="flex items-center gap-3 px-4 py-2.5">
                               <span className="text-xs text-slate-400 w-4 shrink-0">{si + 1}.</span>
                               <p className="flex-1 text-sm text-slate-700">{soru?.metin ?? <span className="italic text-slate-400">—</span>}</p>
-                              {soru && detayForm.puanli && <span className="text-xs font-semibold text-indigo-600 shrink-0">{soru.puan} p</span>}
+                              {soru && detayForm.puanli && (
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {soru.hedefYuzde !== undefined && (
+                                    <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
+                                      %{soru.hedefYuzde}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-semibold text-indigo-600">{soru.puan} p</span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -346,6 +450,9 @@ export default function FormlarPage() {
                 ))}
               </div>
             </div>
+            {editPuanli && (
+              <SkorlamaSecimi value={editSkorlamaSistemi} onChange={setEditSkorlamaSistemi} />
+            )}
             <BolumCheckList bolumler={editBolumler} seciliIds={editSeciliIds}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
               araVal={editBolumAra} onAraChange={setEditBolumAra} />

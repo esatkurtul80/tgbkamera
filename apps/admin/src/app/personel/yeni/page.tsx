@@ -8,21 +8,21 @@ import { createPersonel } from "@/lib/firestore";
 export default function YeniPersonelPage() {
   const router = useRouter();
   const [ad, setAd] = useState("");
-  const [unvan, setUnvan] = useState("");
-  const [departman, setDepartman] = useState("");
+  const [tc, setTc] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!ad.trim()) { setError("Ad Soyad boş bırakılamaz."); return; }
+    if (tc.trim() && tc.trim().length !== 11) { setError("TC Kimlik No 11 haneli olmalıdır."); return; }
     setSaving(true);
-    await createPersonel({ ad: ad.trim(), unvan: unvan.trim(), departman: departman.trim() });
+    await createPersonel({ ad: ad.trim(), tc: tc.trim() });
     router.push("/personel");
   }
 
   return (
-    <div className="max-w-lg">
+    <div className="w-full">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/personel" className="text-sm text-slate-500 hover:text-slate-700">Personel</Link>
         <span className="text-slate-300">/</span>
@@ -43,20 +43,12 @@ export default function YeniPersonelPage() {
             {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Unvan <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">TC Kimlik No <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
             <input
-              value={unvan}
-              onChange={(e) => setUnvan(e.target.value)}
-              placeholder="ör. Mağaza Müdürü"
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Departman / Mağaza <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
-            <input
-              value={departman}
-              onChange={(e) => setDepartman(e.target.value)}
-              placeholder="ör. Satış"
+              value={tc}
+              onChange={(e) => setTc(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="ör. 12345678901"
+              maxLength={11}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

@@ -1,429 +1,290 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Users, Store, ClipboardList, Camera, TrendingUp, ArrowUpRight, MapIcon, Eye } from "lucide-react";
+import Link from "next/link";
 import {
-  Eye, DollarSign, Percent, Users,
-  ArrowUpRight, ArrowDownRight,
-  Calendar, ListFilter, Download,
-  SlidersHorizontal, ArrowUpDown, MoreHorizontal,
-} from "lucide-react";
+  getPersoneller,
+  getMagazalar,
+  getBolgeler,
+  getKullanicilar,
+  getDegerlendirmeler,
+} from "@/lib/firestore";
+import type { Degerlendirme, Magaza } from "@/types";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+interface Stats {
+  toplamPersonel: number;
+  aktifPersonel: number;
+  toplamMagaza: number;
+  toplamBolge: number;
+  toplamKameraman: number;
+  buAyDegerlendirme: number;
+  bugunDegerlendirme: number;
+  toplamDegerlendirme: number;
 }
-
-function arcPath(cx: number, cy: number, outerR: number, innerR: number, startDeg: number, endDeg: number) {
-  const os = polarToCartesian(cx, cy, outerR, startDeg);
-  const oe = polarToCartesian(cx, cy, outerR, endDeg);
-  const is_ = polarToCartesian(cx, cy, innerR, startDeg);
-  const ie = polarToCartesian(cx, cy, innerR, endDeg);
-  const large = endDeg - startDeg > 180 ? 1 : 0;
-  const f = (n: number) => n.toFixed(2);
-  return [
-    `M ${f(os.x)} ${f(os.y)}`,
-    `A ${outerR} ${outerR} 0 ${large} 1 ${f(oe.x)} ${f(oe.y)}`,
-    `L ${f(ie.x)} ${f(ie.y)}`,
-    `A ${innerR} ${innerR} 0 ${large} 0 ${f(is_.x)} ${f(is_.y)}`,
-    "Z",
-  ].join(" ");
-}
-
-// ─── Stat Card ──────────────────────────────────────────────────────────────
 
 function StatCard({
   icon: Icon,
   title,
   value,
-  change,
-  up,
+  sub,
+  color,
+  href,
 }: {
   icon: React.ElementType;
   title: string;
-  value: string;
-  change: string;
-  up: boolean;
+  value: string | number;
+  sub?: string;
+  color: string;
+  href: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100">
+    <Link href={href} className="group bg-white rounded-2xl p-5 border border-slate-100 hover:border-indigo-100 hover:shadow-sm transition-all">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-slate-500">
-          <Icon size={15} />
-          <span className="text-sm">{title}</span>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color}`}>
+          <Icon size={16} className="text-white" />
         </div>
-        <button className="text-slate-300 hover:text-slate-500">
-          <MoreHorizontal size={16} />
-        </button>
+        <ArrowUpRight size={14} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
       </div>
-      <div className="flex items-end gap-3">
-        <span className="text-3xl font-bold text-slate-900 tracking-tight">{value}</span>
-        <span
-          className={`flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full mb-1 ${
-            up ? "text-emerald-600 bg-emerald-50" : "text-red-500 bg-red-50"
-          }`}
-        >
-          {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-          {change}
-        </span>
+      <p className="text-3xl font-bold text-slate-900 tracking-tight">{value}</p>
+      <p className="text-sm text-slate-500 mt-1">{title}</p>
+      {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+    </Link>
+  );
+}
+
+function SonDegerlendirmelerTable({ degerlendirmeler, magazaMap }: {
+  degerlendirmeler: Degerlendirme[];
+  magazaMap: Record<string, string>;
+}) {
+  if (degerlendirmeler.length === 0) {
+    return (
+      <div className="text-center py-10 text-slate-400">
+        <ClipboardList size={24} className="mx-auto mb-2 opacity-40" />
+        <p className="text-sm">Henüz değerlendirme yok</p>
       </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-slate-100">
+            <th className="pb-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Personel</th>
+            <th className="pb-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mağaza</th>
+            <th className="pb-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Form</th>
+            <th className="pb-2.5 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Puan</th>
+            <th className="pb-2.5 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-32">Tarih</th>
+            <th className="pb-2.5 w-10" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {degerlendirmeler.map((d) => {
+            const yuzde = d.puanli && d.maxPuan && d.maxPuan > 0 && d.toplamPuan !== null
+              ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
+            return (
+              <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
+                <td className="py-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                      <span className="text-[10px] font-bold text-indigo-600">{d.personelAd.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-800">{d.personelAd}</span>
+                  </div>
+                </td>
+                <td className="py-3 text-sm text-slate-500">
+                  {magazaMap[d.magazaId] ?? d.magazaAd ?? <span className="text-slate-300">—</span>}
+                </td>
+                <td className="py-3 text-sm text-slate-500 max-w-[160px] truncate">{d.formAd}</td>
+                <td className="py-3 text-center">
+                  {yuzde !== null ? (
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`text-xs font-bold ${yuzde >= 80 ? "text-emerald-600" : yuzde >= 50 ? "text-amber-500" : "text-red-500"}`}>%{yuzde}</span>
+                      <div className="w-14 h-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${yuzde >= 80 ? "bg-emerald-500" : yuzde >= 50 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${yuzde}%` }} />
+                      </div>
+                    </div>
+                  ) : <span className="text-xs text-slate-300">Puansız</span>}
+                </td>
+                <td className="py-3 text-right text-sm text-slate-400 whitespace-nowrap">
+                  {d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
+                </td>
+                <td className="py-3 text-right">
+                  <Link href={`/degerlendirmeler/${d.id}`}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex">
+                    <Eye size={14} />
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-// ─── Sales Overview Chart ────────────────────────────────────────────────────
-
-function SalesOverviewChart() {
-  const chartBottom = 168;
-  const colors = [
-    { bar: "#1E1B4B", ribbon: "rgba(30,27,75,0.15)" },
-    { bar: "#3B82F6", ribbon: "rgba(59,130,246,0.15)" },
-    { bar: "#06B6D4", ribbon: "rgba(6,182,212,0.25)" },
-    { bar: "#8B5CF6", ribbon: "rgba(139,92,246,0.15)" },
-    { bar: "#A5B4FC", ribbon: "rgba(165,180,252,0.15)" },
-  ];
-  const ratios = [0.30, 0.25, 0.22, 0.13, 0.10];
-
-  const groups = [
-    { label: "Oct", value: "$2,988.20", totalPx: 100, x1: 48, x2: 103 },
-    { label: "Nov", value: "$1,765.09", totalPx: 59, x1: 180, x2: 235 },
-    { label: "Dec", value: "$4,005.65", totalPx: 140, x1: 312, x2: 367 },
-  ];
-
-  function getStacks(totalPx: number) {
-    let cur = chartBottom;
-    return ratios.map((r) => {
-      const h = Math.round(r * totalPx);
-      const pos = { top: cur - h, bottom: cur };
-      cur -= h;
-      return pos;
-    });
+function MagazaOzeti({ degerlendirmeler, magazalar }: { degerlendirmeler: Degerlendirme[]; magazalar: Magaza[] }) {
+  const sayilar: Record<string, number> = {};
+  for (const d of degerlendirmeler) {
+    if (d.magazaId) sayilar[d.magazaId] = (sayilar[d.magazaId] ?? 0) + 1;
   }
 
-  const stacks = groups.map((g) => getStacks(g.totalPx));
+  const sirali = magazalar
+    .map((m) => ({ magaza: m, sayi: sayilar[m.id] ?? 0 }))
+    .sort((a, b) => b.sayi - a.sayi)
+    .slice(0, 6);
 
-  function ribbon(
-    x1: number, x2: number,
-    s1: { top: number; bottom: number },
-    s2: { top: number; bottom: number },
-  ) {
-    const mx = (x1 + x2) / 2;
-    return `M ${x1} ${s1.top} C ${mx} ${s1.top} ${mx} ${s2.top} ${x2} ${s2.top} L ${x2} ${s2.bottom} C ${mx} ${s2.bottom} ${mx} ${s1.bottom} ${x1} ${s1.bottom} Z`;
+  const maxSayi = sirali[0]?.sayi ?? 1;
+
+  if (sirali.length === 0 || maxSayi === 0) {
+    return <p className="text-sm text-slate-400 py-6 text-center">Henüz değerlendirme yok</p>;
   }
 
   return (
-    <svg viewBox="0 0 415 185" className="w-full">
-      {/* Ribbons */}
-      {[0, 1].map((gi) =>
-        colors.map((c, ci) => (
-          <path
-            key={`r-${gi}-${ci}`}
-            d={ribbon(groups[gi].x2, groups[gi + 1].x1, stacks[gi][ci], stacks[gi + 1][ci])}
-            fill={c.ribbon}
-          />
-        )),
-      )}
-      {/* Bars */}
-      {groups.map((g, gi) =>
-        colors.map((c, ci) => (
-          <rect
-            key={`b-${gi}-${ci}`}
-            x={g.x1} y={stacks[gi][ci].top}
-            width={g.x2 - g.x1} height={stacks[gi][ci].bottom - stacks[gi][ci].top}
-            fill={c.bar} rx="2"
-          />
-        )),
-      )}
-      {/* Value labels */}
-      {groups.map((g, gi) => (
-        <text
-          key={`v-${gi}`}
-          x={(g.x1 + g.x2) / 2} y={stacks[gi][stacks[gi].length - 1].top - 7}
-          textAnchor="middle" fontSize="10" fontWeight="600" fill="#374151"
-        >
-          {g.value}
-        </text>
+    <div className="space-y-3">
+      {sirali.map(({ magaza, sayi }) => (
+        <div key={magaza.id} className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center shrink-0">
+            <Store size={13} className="text-teal-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-slate-700 truncate">{magaza.ad}</p>
+              <span className="text-xs font-semibold text-slate-500 ml-2 shrink-0">{sayi}</span>
+            </div>
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${(sayi / maxSayi) * 100}%` }} />
+            </div>
+          </div>
+        </div>
       ))}
-      {/* Month labels */}
-      {groups.map((g, gi) => (
-        <text
-          key={`m-${gi}`}
-          x={(g.x1 + g.x2) / 2} y={180}
-          textAnchor="middle" fontSize="11" fill="#9CA3AF"
-        >
-          {g.label}
-        </text>
-      ))}
-    </svg>
-  );
-}
-
-// ─── Subscriber Chart ────────────────────────────────────────────────────────
-
-function SubscriberChart() {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const rawValues = [1100, 1750, 3874, 870, 1480, 750, 1050];
-  const maxV = 3874;
-  const chartH = 105;
-  const chartBot = 120;
-  const bw = 18;
-  const step = 28;
-  const startX = 12;
-
-  return (
-    <svg viewBox="0 0 215 145" className="w-full">
-      <defs>
-        <linearGradient id="purpleG" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7C3AED" />
-          <stop offset="100%" stopColor="#C4B5FD" />
-        </linearGradient>
-      </defs>
-      {days.map((day, i) => {
-        const h = Math.round((rawValues[i] / maxV) * chartH);
-        const x = startX + i * step;
-        const y = chartBot - h;
-        const isTue = i === 2;
-        return (
-          <g key={day}>
-            <rect x={x} y={y} width={bw} height={h} fill={isTue ? "url(#purpleG)" : "#E5E7EB"} rx="4" />
-            {isTue && (
-              <text x={x + bw / 2} y={y - 5} textAnchor="middle" fontSize="9" fontWeight="700" fill="#374151">
-                3,874
-              </text>
-            )}
-            <text x={x + bw / 2} y={137} textAnchor="middle" fontSize="9" fill={isTue ? "#7C3AED" : "#9CA3AF"} fontWeight={isTue ? "700" : "400"}>
-              {day}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// ─── Donut Chart ─────────────────────────────────────────────────────────────
-
-function DonutChart() {
-  const cx = 65, cy = 65, outerR = 56, innerR = 34;
-  const segments = [
-    { label: "Website", value: 374.82, color: "#3B82F6" },
-    { label: "Mobile App", value: 241.60, color: "#06B6D4" },
-    { label: "Other", value: 213.42, color: "#E2E8F0" },
-  ];
-  const total = segments.reduce((s, x) => s + x.value, 0);
-
-  let angle = -90;
-  const paths = segments.map((seg) => {
-    const span = (seg.value / total) * 360;
-    const path = arcPath(cx, cy, outerR, innerR, angle, angle + span);
-    angle += span;
-    return { ...seg, path };
-  });
-
-  return (
-    <svg viewBox="0 0 130 130" className="w-full max-w-[130px]">
-      {paths.map((p) => (
-        <path key={p.label} d={p.path} fill={p.color} />
-      ))}
-    </svg>
-  );
-}
-
-// ─── Progress Bar ────────────────────────────────────────────────────────────
-
-function RateBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: color }} />
-      </div>
-      <span className="text-xs text-slate-500 w-8 text-right">{value}%</span>
     </div>
   );
 }
-
-// ─── Page ────────────────────────────────────────────────────────────────────
-
-const integrations = [
-  { name: "Stripe", type: "Finance", rate: 40, profit: "$650.00", color: "#6366F1", initials: "S", bg: "#EEF2FF" },
-  { name: "Zapier", type: "CRM", rate: 80, profit: "$720.50", color: "#3B82F6", initials: "Z", bg: "#EFF6FF" },
-  { name: "Shopify", type: "Marketplace", rate: 20, profit: "$432.25", color: "#8B5CF6", initials: "Sh", bg: "#F5F3FF" },
-];
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [sonDeg, setSonDeg] = useState<Degerlendirme[]>([]);
+  const [magazalar, setMagazalar] = useState<Magaza[]>([]);
+  const [tumDeg, setTumDeg] = useState<Degerlendirme[]>([]);
+  const [magazaMap, setMagazaMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      const [personeller, magazalarData, bolgeler, kullanicilar, degerlendirmeler] = await Promise.all([
+        getPersoneller(), getMagazalar(), getBolgeler(), getKullanicilar(), getDegerlendirmeler(),
+      ]);
+
+      const now = new Date();
+      const buAyBaslangic = new Date(now.getFullYear(), now.getMonth(), 1);
+      const bugunBaslangic = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const buAy = degerlendirmeler.filter((d) => {
+        const t = d.izlenmeTarihi?.toDate?.();
+        return t && t >= buAyBaslangic;
+      });
+      const bugun = degerlendirmeler.filter((d) => {
+        const t = d.izlenmeTarihi?.toDate?.();
+        return t && t >= bugunBaslangic;
+      });
+
+      setStats({
+        toplamPersonel: personeller.length,
+        aktifPersonel: personeller.filter((p) => p.aktif).length,
+        toplamMagaza: magazalarData.length,
+        toplamBolge: bolgeler.length,
+        toplamKameraman: kullanicilar.filter((k) => k.rol === "kameraman").length,
+        buAyDegerlendirme: buAy.length,
+        bugunDegerlendirme: bugun.length,
+        toplamDegerlendirme: degerlendirmeler.length,
+      });
+
+      const map: Record<string, string> = {};
+      magazalarData.forEach((m) => { map[m.id] = m.ad; });
+      setMagazaMap(map);
+      setMagazalar(magazalarData);
+      setTumDeg(degerlendirmeler);
+      setSonDeg(degerlendirmeler.slice(0, 8));
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-5 w-full">
+        <div className="w-32 h-7 bg-slate-100 rounded animate-pulse" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-2xl p-5 border border-slate-100 h-28 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5 max-w-[1280px]">
-      {/* Header */}
+    <div className="space-y-5 w-full">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50">
-            <Calendar size={13} /> Oct 18 - Nov 18
-            <span className="text-slate-400 mx-0.5">|</span> Monthly
-          </button>
-          <button className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50">
-            <ListFilter size={13} /> Filter
-          </button>
-          <button className="flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 bg-white rounded-lg px-3 py-2 hover:bg-slate-50">
-            <Download size={13} /> Export
-          </button>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
+          </p>
         </div>
+        <Link href="/degerlendirmeler/yeni"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+          <ClipboardList size={15} /> Yeni Değerlendirme
+        </Link>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-3 gap-5">
-        <StatCard icon={Eye} title="Page Views" value="12,450" change="15.8%" up />
-        <StatCard icon={DollarSign} title="Total Revenue" value="$363.95" change="34.0%" up={false} />
-        <StatCard icon={Percent} title="Bounce Rate" value="86.5%" change="24.2%" up />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={Users} title="Personel" value={stats?.toplamPersonel ?? 0} sub={`${stats?.aktifPersonel} aktif`} color="bg-indigo-500" href="/personel" />
+        <StatCard icon={Store} title="Mağazalar" value={stats?.toplamMagaza ?? 0} sub={`${stats?.toplamBolge} bölge`} color="bg-teal-500" href="/magazalar" />
+        <StatCard icon={ClipboardList} title="Bu Ay Değerlendirme" value={stats?.buAyDegerlendirme ?? 0} sub={`${stats?.bugunDegerlendirme} bugün`} color="bg-blue-500" href="/degerlendirmeler" />
+        <StatCard icon={Camera} title="Kameramanlar" value={stats?.toplamKameraman ?? 0} sub={`${stats?.toplamDegerlendirme} toplam rapor`} color="bg-violet-500" href="/kullanicilar" />
       </div>
 
-      {/* Charts row */}
       <div className="grid grid-cols-12 gap-5">
-        {/* Sales Overview */}
-        <div className="col-span-7 bg-white rounded-2xl p-5 border border-slate-100">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2 text-slate-700">
-              <MoreHorizontal size={15} className="text-slate-400" />
-              <span className="text-sm font-semibold">Sales Overview</span>
+        <div className="col-span-12 lg:col-span-8 bg-white rounded-2xl p-5 border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={15} className="text-slate-400" />
+              <span className="text-sm font-semibold text-slate-800">Son Değerlendirmeler</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button className="flex items-center gap-1 text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50">
-                <SlidersHorizontal size={11} /> Filter
-              </button>
-              <button className="flex items-center gap-1 text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50">
-                <ArrowUpDown size={11} /> Sort
-              </button>
-              <button className="text-slate-400 hover:text-slate-600 p-1.5">
-                <MoreHorizontal size={14} />
-              </button>
-            </div>
+            <Link href="/degerlendirmeler" className="text-xs text-indigo-600 font-semibold hover:underline">Tümünü Gör →</Link>
           </div>
-          <div className="mb-3">
-            <p className="text-2xl font-bold text-slate-900">$9,257.51</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full text-emerald-600 bg-emerald-50">
-                <ArrowUpRight size={11} /> 15.8%
-              </span>
-              <span className="text-xs text-slate-500">+ $143.50 increased</span>
-            </div>
-          </div>
-          <SalesOverviewChart />
-          {/* Legend */}
-          <div className="flex items-center gap-4 mt-2 flex-wrap">
-            {[
-              { label: "China", color: "#1E1B4B" },
-              { label: "UE", color: "#3B82F6" },
-              { label: "USA", color: "#06B6D4" },
-              { label: "Canada", color: "#8B5CF6" },
-              { label: "Other", color: "#A5B4FC" },
-            ].map((l) => (
-              <div key={l.label} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: l.color }} />
-                <span className="text-xs text-slate-500">{l.label}</span>
-              </div>
-            ))}
-          </div>
+          <SonDegerlendirmelerTable degerlendirmeler={sonDeg} magazaMap={magazaMap} />
         </div>
 
-        {/* Total Subscriber */}
-        <div className="col-span-5 bg-white rounded-2xl p-5 border border-slate-100">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2 text-slate-700">
-              <Users size={15} className="text-slate-400" />
-              <span className="text-sm font-semibold">Total Subscriber</span>
-            </div>
-            <button className="flex items-center gap-1 text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50">
-              Weekly ▾
-            </button>
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mb-1">24,473</p>
+        <div className="col-span-12 lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-100">
           <div className="flex items-center gap-2 mb-4">
-            <span className="flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full text-emerald-600 bg-emerald-50">
-              <ArrowUpRight size={11} /> 8.3%
-            </span>
-            <span className="text-xs text-slate-500">+ 749 increased</span>
+            <MapIcon size={15} className="text-slate-400" />
+            <span className="text-sm font-semibold text-slate-800">Mağaza Başına Rapor</span>
           </div>
-          <SubscriberChart />
+          <MagazaOzeti degerlendirmeler={tumDeg} magazalar={magazalar} />
         </div>
       </div>
 
-      {/* Bottom row */}
-      <div className="grid grid-cols-12 gap-5">
-        {/* Sales Distribution */}
-        <div className="col-span-5 bg-white rounded-2xl p-5 border border-slate-100">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2 text-slate-700">
-              <MoreHorizontal size={15} className="text-slate-400" />
-              <span className="text-sm font-semibold">Sales Distribution</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Bölgeler", href: "/bolgeler", icon: MapIcon, color: "text-blue-600 bg-blue-50" },
+          { label: "Formlar", href: "/formlar", icon: ClipboardList, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Kullanıcılar", href: "/kullanicilar", icon: Users, color: "text-violet-600 bg-violet-50" },
+          { label: "Raporlar", href: "/degerlendirmeler", icon: TrendingUp, color: "text-emerald-600 bg-emerald-50" },
+        ].map((item) => (
+          <Link key={item.href} href={item.href}
+            className="flex items-center gap-3 p-4 bg-white rounded-xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all group">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color}`}>
+              <item.icon size={15} />
             </div>
-            <button className="flex items-center gap-1 text-xs text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50">
-              Monthly ▾
-            </button>
-          </div>
-          <div className="flex items-center gap-6">
-            <DonutChart />
-            <div className="space-y-3 flex-1">
-              {[
-                { label: "Website", amount: "$374.82", color: "#3B82F6" },
-                { label: "Mobile App", amount: "$241.60", color: "#06B6D4" },
-                { label: "Other", amount: "$213.42", color: "#E2E8F0" },
-              ].map((item) => (
-                <div key={item.label}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-xs text-slate-500">{item.label}</span>
-                  </div>
-                  <p className="text-sm font-bold text-slate-900 ml-4">{item.amount}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* List of Integration */}
-        <div className="col-span-7 bg-white rounded-2xl p-5 border border-slate-100">
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2 text-slate-700">
-              <MoreHorizontal size={15} className="text-slate-400" />
-              <span className="text-sm font-semibold">List of Integration</span>
-            </div>
-            <button className="text-xs text-blue-600 font-semibold hover:underline">See All</button>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100">
-                <th className="w-6 pb-2.5" />
-                <th className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider pb-2.5">Application</th>
-                <th className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider pb-2.5">Type</th>
-                <th className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider pb-2.5 w-36">Rate</th>
-                <th className="text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider pb-2.5">Profit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {integrations.map((row) => (
-                <tr key={row.name} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="py-3.5">
-                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300" />
-                  </td>
-                  <td className="py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                        style={{ backgroundColor: row.bg, color: row.color }}
-                      >
-                        {row.initials}
-                      </div>
-                      <span className="text-sm font-medium text-slate-800">{row.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 text-sm text-slate-500">{row.type}</td>
-                  <td className="py-3.5">
-                    <RateBar value={row.rate} color={row.color} />
-                  </td>
-                  <td className="py-3.5 text-sm font-semibold text-slate-800 text-right">{row.profit}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">{item.label}</span>
+            <ArrowUpRight size={13} className="text-slate-300 group-hover:text-slate-500 ml-auto" />
+          </Link>
+        ))}
       </div>
     </div>
   );

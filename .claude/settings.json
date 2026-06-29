@@ -3,7 +3,8 @@
     "allow": [
       "PowerShell(npm view expo@55.0.26 peerDependencies --json 2>&1)",
       "Bash(del /f package-lock.json)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue)"
     ]
   }
 }

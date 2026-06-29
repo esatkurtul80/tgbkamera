@@ -20,6 +20,8 @@
   },
   "packageManager": "npm@10.9.0",
   "devDependencies": {
+    "expo": "~54.0.0",
+    "expo-router": "~6.0.24",
     "turbo": "latest"
   },
   "keywords": [],

@@ -1,31 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Pencil, Search, Plus } from "lucide-react";
-import EmptyState from "@/components/ui/EmptyState";
+import { Users, Pencil, Plus, Store, Check, Search } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
-import { getPersoneller, createPersonel, getPersonel, updatePersonel } from "@/lib/firestore";
-import type { Personel } from "@/types";
+import DataTable, { type DataColumn } from "@/components/ui/DataTable";
+import { getPersoneller, createPersonel, getPersonel, updatePersonel, getMagazalar } from "@/lib/firestore";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Personel, Magaza } from "@/types";
 
 export default function PersonelPage() {
+  const { kullanici } = useAuth();
   const [personeller, setPersoneller] = useState<Personel[]>([]);
+  const [magazalar, setMagazalar] = useState<Magaza[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ara, setAra] = useState("");
 
-  // Yeni personel modal
+  const isKameraman = kullanici?.rol === "kameraman";
+
   const [yeniAcik, setYeniAcik] = useState(false);
   const [yeniAd, setYeniAd] = useState("");
-  const [yeniUnvan, setYeniUnvan] = useState("");
-  const [yeniDepartman, setYeniDepartman] = useState("");
+  const [yeniTc, setYeniTc] = useState("");
+  const [yeniMagazaIds, setYeniMagazaIds] = useState<string[]>([]);
+  const [yeniMagazaAra, setYeniMagazaAra] = useState("");
   const [yeniSaving, setYeniSaving] = useState(false);
   const [yeniError, setYeniError] = useState("");
 
-  // Düzenle modal
   const [editId, setEditId] = useState<string | null>(null);
   const [editAd, setEditAd] = useState("");
-  const [editUnvan, setEditUnvan] = useState("");
-  const [editDepartman, setEditDepartman] = useState("");
+  const [editTc, setEditTc] = useState("");
+  const [editMagazaIds, setEditMagazaIds] = useState<string[]>([]);
+  const [editOrijinalMagazaIds, setEditOrijinalMagazaIds] = useState<string[]>([]);
+  const [editMagazaAra, setEditMagazaAra] = useState("");
   const [editAktif, setEditAktif] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
@@ -33,52 +38,149 @@ export default function PersonelPage() {
 
   async function load() {
     setLoading(true);
-    setPersoneller(await getPersoneller());
-    setLoading(false);
+    const [p, m] = await Promise.all([getPersoneller(), getMagazalar()]);
+    setPersoneller(p); setMagazalar(m); setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
   function openYeni() {
-    setYeniAd(""); setYeniUnvan(""); setYeniDepartman(""); setYeniError("");
+    setYeniAd(""); setYeniTc(""); setYeniMagazaIds([]); setYeniMagazaAra(""); setYeniError("");
     setYeniAcik(true);
   }
 
   async function handleYeniSave(e: React.FormEvent) {
     e.preventDefault();
     if (!yeniAd.trim()) { setYeniError("Ad Soyad boş bırakılamaz."); return; }
+    if (yeniTc.trim() && yeniTc.trim().length !== 11) { setYeniError("TC Kimlik No 11 haneli olmalıdır."); return; }
     setYeniSaving(true);
-    await createPersonel({ ad: yeniAd.trim(), unvan: yeniUnvan.trim(), departman: yeniDepartman.trim() });
-    setYeniSaving(false);
-    setYeniAcik(false);
-    load();
+    await createPersonel({ ad: yeniAd.trim(), tc: yeniTc.trim(), magazaIdleri: yeniMagazaIds });
+    setYeniSaving(false); setYeniAcik(false); load();
   }
 
   async function openEdit(id: string) {
-    setEditId(id);
-    setEditLoading(true);
-    setEditError("");
+    setEditId(id); setEditLoading(true); setEditError(""); setEditMagazaAra("");
     const p = await getPersonel(id);
-    if (p) { setEditAd(p.ad); setEditUnvan(p.unvan); setEditDepartman(p.departman); setEditAktif(p.aktif); }
+    if (p) { 
+      setEditAd(p.ad); 
+      setEditTc(p.tc || ""); 
+      setEditMagazaIds(p.magazaIdleri ?? []); 
+      setEditOrijinalMagazaIds(p.magazaIdleri ?? []);
+      setEditAktif(p.aktif); 
+    }
     setEditLoading(false);
   }
 
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault();
     if (!editId || !editAd.trim()) { setEditError("Ad Soyad boş bırakılamaz."); return; }
+    if (editTc.trim() && editTc.trim().length !== 11) { setEditError("TC Kimlik No 11 haneli olmalıdır."); return; }
     setEditSaving(true);
-    await updatePersonel(editId, { ad: editAd.trim(), unvan: editUnvan.trim(), departman: editDepartman.trim(), aktif: editAktif });
-    setEditSaving(false);
-    setEditId(null);
-    load();
+    
+    await updatePersonel(editId, { ad: editAd.trim(), tc: editTc.trim(), magazaIdleri: editMagazaIds, aktif: editAktif });
+    setEditSaving(false); setEditId(null); load();
   }
 
-  const filtrelenmis = personeller.filter((p) =>
-    p.ad.toLowerCase().includes(ara.toLowerCase()) ||
-    p.unvan?.toLowerCase().includes(ara.toLowerCase()) ||
-    p.departman?.toLowerCase().includes(ara.toLowerCase())
-  );
+  function MagazaCheckList({ seciliIds, onToggle, araVal, onAraChange }: {
+    seciliIds: string[]; onToggle: (id: string) => void; araVal: string; onAraChange: (v: string) => void;
+  }) {
+    const filtreli = magazalar.filter((m) => m.ad.toLowerCase().includes(araVal.toLowerCase()));
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-slate-700">Mağaza Ata <span className="text-slate-400 font-normal">({seciliIds.filter(id => magazalar.some(m => m.id === id)).length} seçili)</span></p>
+          {magazalar.length > 4 && (
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
+                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
+            </div>
+          )}
+        </div>
+        {magazalar.length === 0 ? (
+          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz mağaza yok. Önce mağaza oluşturun.</p>
+        ) : (
+          <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
+            {filtreli.map((m) => {
+              const secili = seciliIds.includes(m.id);
+              return (
+                <button key={m.id} type="button" onClick={() => onToggle(m.id)}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-teal-50" : "hover:bg-slate-50"}`}>
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-teal-600 border-teal-600" : "border-slate-300"}`}>
+                    {secili && <Check size={10} className="text-white" />}
+                  </div>
+                  <Store size={13} className={secili ? "text-teal-600" : "text-slate-400"} />
+                  <span className={`flex-1 text-sm ${secili ? "text-teal-700 font-medium" : "text-slate-700"}`}>{m.ad}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
-  const aktifSayisi = personeller.filter((p) => p.aktif).length;
+  const columns: DataColumn<Personel>[] = [
+    {
+      key: "ad",
+      header: "Personel",
+      searchValue: (p) => `${p.ad} ${p.tc ?? ""}`,
+      sortValue: (p) => p.ad,
+      cell: (p) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold text-indigo-600">{p.ad.charAt(0).toUpperCase()}</span>
+          </div>
+          <span className="text-sm font-medium text-slate-800">{p.ad}</span>
+        </div>
+      ),
+    },
+    {
+      key: "tc",
+      header: "TC Kimlik No",
+      sortValue: (p) => p.tc ?? "",
+      cell: (p) => <span className="text-sm text-slate-500">{p.tc || <span className="text-slate-300">—</span>}</span>,
+    },
+    {
+      key: "magazalar",
+      header: "Mağazalar",
+      cell: (p) =>
+        p.magazaIdleri?.length ? (
+          <div className="flex flex-wrap gap-1">
+            {p.magazaIdleri.slice(0, 2).map((id) => {
+              const m = magazalar.find((x) => x.id === id);
+              return m ? (
+                <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 rounded text-xs font-medium">
+                  <Store size={10} /> {m.ad}
+                </span>
+              ) : null;
+            })}
+            {p.magazaIdleri.length > 2 && <span className="text-xs text-slate-400">+{p.magazaIdleri.length - 2}</span>}
+          </div>
+        ) : <span className="text-slate-300 text-sm">—</span>,
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      align: "center",
+      width: "90px",
+      sortValue: (p) => p.aktif ? 1 : 0,
+      cell: (p) => <Badge variant={p.aktif ? "aktif" : "pasif"} />,
+    },
+  ];
+
+  if (!isKameraman) {
+    columns.push({
+      key: "islemler",
+      header: "İşlemler",
+      align: "right",
+      width: "80px",
+      cell: (p) => (
+        <button onClick={() => openEdit(p.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
+          <Pencil size={14} />
+        </button>
+      ),
+    });
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -87,75 +189,23 @@ export default function PersonelPage() {
           <h1 className="text-xl font-bold text-slate-900">Personel</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {personeller.length} personel
-            {aktifSayisi < personeller.length && <span className="ml-2 text-slate-400">· {aktifSayisi} aktif</span>}
+            {personeller.filter((p) => p.aktif).length < personeller.length && (
+              <span className="ml-2 text-slate-400">· {personeller.filter((p) => p.aktif).length} aktif</span>
+            )}
           </p>
         </div>
-        <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-          <Plus size={15} /> Yeni Personel
-        </button>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Ad, unvan veya departman ara..." value={ara} onChange={(e) => setAra(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50" />
-          </div>
-          {ara && <span className="text-xs text-slate-400">{filtrelenmis.length} sonuç</span>}
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-        ) : filtrelenmis.length === 0 ? (
-          <EmptyState icon={Users} title={ara ? "Eşleşen personel bulunamadı" : "Henüz personel yok"} description={ara ? "Arama teriminizi değiştirin." : "İlk personeli eklemek için sağ üstteki butona tıklayın."} />
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/80">
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Personel</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Unvan</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Departman / Mağaza</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Durum</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-20">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filtrelenmis.map((p, i) => (
-                <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="px-4 py-3.5 text-sm text-slate-400 tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-indigo-600">{p.ad.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <span className="text-sm font-medium text-slate-800">{p.ad}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-sm text-slate-500">{p.unvan || <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3.5 text-sm text-slate-500">{p.departman || <span className="text-slate-300">—</span>}</td>
-                  <td className="px-4 py-3.5 text-center"><Badge variant={p.aktif ? "aktif" : "pasif"} /></td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end">
-                      <button onClick={() => openEdit(p.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
-                        <Pencil size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && filtrelenmis.length > 0 && (
-          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-xs text-slate-400">{filtrelenmis.length} personel listeleniyor</p>
-          </div>
+        {!isKameraman && (
+          <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+            <Plus size={15} /> Yeni Personel
+          </button>
         )}
       </div>
 
-      {/* Yeni Personel Modal */}
+      <DataTable data={personeller} columns={columns} rowKey={(p) => p.id} loading={loading}
+        searchPlaceholder="Ad veya TC kimlik no ara..." emptyIcon={Users}
+        emptyTitle="Henüz personel yok" emptyDescription="İlk personeli eklemek için sağ üstteki butona tıklayın." />
+
+      {/* Yeni Modal */}
       <Modal open={yeniAcik} onClose={() => setYeniAcik(false)} title="Yeni Personel">
         <form onSubmit={handleYeniSave} className="space-y-5">
           <div>
@@ -165,31 +215,28 @@ export default function PersonelPage() {
             {yeniError && <p className="text-xs text-red-500 mt-1">{yeniError}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Unvan <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
-            <input value={yeniUnvan} onChange={(e) => setYeniUnvan(e.target.value)} placeholder="ör. Mağaza Müdürü"
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">TC Kimlik No <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
+            <input value={yeniTc} onChange={(e) => setYeniTc(e.target.value.replace(/[^0-9]/g, ''))} placeholder="ör. 12345678901"
+              maxLength={11}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Departman / Mağaza <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
-            <input value={yeniDepartman} onChange={(e) => setYeniDepartman(e.target.value)} placeholder="ör. Satış"
-              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
+          {(magazalar.length > 0) && (
+            <MagazaCheckList seciliIds={yeniMagazaIds}
+              onToggle={(id) => setYeniMagazaIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
+              araVal={yeniMagazaAra} onAraChange={setYeniMagazaAra} />
+          )}
           <div className="flex gap-3 pt-1">
             <button type="submit" disabled={yeniSaving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
               {yeniSaving ? "Kaydediliyor..." : "Kaydet"}
             </button>
-            <button type="button" onClick={() => setYeniAcik(false)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-              İptal
-            </button>
+            <button type="button" onClick={() => setYeniAcik(false)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">İptal</button>
           </div>
         </form>
       </Modal>
 
       {/* Düzenle Modal */}
       <Modal open={!!editId} onClose={() => setEditId(null)} title="Personeli Düzenle">
-        {editLoading ? (
-          <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-        ) : (
+        {editLoading ? <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div> : (
           <form onSubmit={handleEditSave} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Ad Soyad</label>
@@ -198,35 +245,32 @@ export default function PersonelPage() {
               {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Unvan <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
-              <input value={editUnvan} onChange={(e) => setEditUnvan(e.target.value)}
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">TC Kimlik No <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
+              <input value={editTc} onChange={(e) => setEditTc(e.target.value.replace(/[^0-9]/g, ''))}
+                maxLength={11}
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Departman / Mağaza <span className="text-slate-400 font-normal">(isteğe bağlı)</span></label>
-              <input value={editDepartman} onChange={(e) => setEditDepartman(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-700 mb-2">Durum</p>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setEditAktif(true)}
-                  className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${editAktif ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                  Aktif
-                </button>
-                <button type="button" onClick={() => setEditAktif(false)}
-                  className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${!editAktif ? "border-red-400 bg-red-50 text-red-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                  Pasif
-                </button>
+            {(magazalar.length > 0) && (
+              <MagazaCheckList seciliIds={editMagazaIds}
+                onToggle={(id) => setEditMagazaIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
+                araVal={editMagazaAra} onAraChange={setEditMagazaAra} />
+            )}
+            {!isKameraman && (
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">Durum</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setEditAktif(true)}
+                    className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${editAktif ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Aktif</button>
+                  <button type="button" onClick={() => setEditAktif(false)}
+                    className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${!editAktif ? "border-red-400 bg-red-50 text-red-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Pasif</button>
+                </div>
               </div>
-            </div>
+            )}
             <div className="flex gap-3 pt-1">
               <button type="submit" disabled={editSaving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
                 {editSaving ? "Kaydediliyor..." : "Güncelle"}
               </button>
-              <button type="button" onClick={() => setEditId(null)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                İptal
-              </button>
+              <button type="button" onClick={() => setEditId(null)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">İptal</button>
             </div>
           </form>
         )}

@@ -1,21 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Layers, Pencil, Trash2, Search, Plus, Eye, Check } from "lucide-react";
-import EmptyState from "@/components/ui/EmptyState";
+import { Layers, Pencil, Trash2, Plus, Eye, Check, Search } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
+import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import { getBolumler, deleteBolum, createBolum, getBolum, updateBolum, getSorular } from "@/lib/firestore";
 import type { Bolum, Soru } from "@/types";
 
 export default function BolumlerPage() {
   const [bolumler, setBolumler] = useState<Bolum[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ara, setAra] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Yeni bölüm modal
   const [yeniAcik, setYeniAcik] = useState(false);
   const [yeniAd, setYeniAd] = useState("");
   const [yeniAciklama, setYeniAciklama] = useState("");
@@ -25,12 +23,10 @@ export default function BolumlerPage() {
   const [yeniSaving, setYeniSaving] = useState(false);
   const [yeniError, setYeniError] = useState("");
 
-  // Detay modal
   const [detayBolum, setDetayBolum] = useState<Bolum | null>(null);
   const [detaySoruMap, setDetaySoruMap] = useState<Record<string, Soru>>({});
   const [detayLoading, setDetayLoading] = useState(false);
 
-  // Düzenle modal
   const [editId, setEditId] = useState<string | null>(null);
   const [editAd, setEditAd] = useState("");
   const [editAciklama, setEditAciklama] = useState("");
@@ -50,8 +46,7 @@ export default function BolumlerPage() {
 
   async function openYeni() {
     setYeniAd(""); setYeniAciklama(""); setYeniSeciliIds([]); setYeniSoruAra(""); setYeniError("");
-    const s = await getSorular();
-    setYeniSorular(s);
+    setYeniSorular(await getSorular());
     setYeniAcik(true);
   }
 
@@ -60,14 +55,11 @@ export default function BolumlerPage() {
     if (!yeniAd.trim()) { setYeniError("Bölüm adı boş bırakılamaz."); return; }
     setYeniSaving(true);
     await createBolum({ ad: yeniAd.trim(), aciklama: yeniAciklama.trim(), soruIdleri: yeniSeciliIds });
-    setYeniSaving(false);
-    setYeniAcik(false);
-    load();
+    setYeniSaving(false); setYeniAcik(false); load();
   }
 
   async function openDetay(id: string) {
-    setDetayLoading(true);
-    setDetayBolum(null);
+    setDetayLoading(true); setDetayBolum(null);
     const [b, tumSorular] = await Promise.all([getBolum(id), getSorular()]);
     setDetayBolum(b);
     const map: Record<string, Soru> = {};
@@ -77,9 +69,7 @@ export default function BolumlerPage() {
   }
 
   async function openEdit(id: string) {
-    setEditId(id);
-    setEditLoading(true);
-    setEditError(""); setEditSoruAra("");
+    setEditId(id); setEditLoading(true); setEditError(""); setEditSoruAra("");
     const [b, tumSorular] = await Promise.all([getBolum(id), getSorular()]);
     if (b) { setEditAd(b.ad); setEditAciklama(b.aciklama); setEditSeciliIds(b.soruIdleri); }
     setEditSorular(tumSorular);
@@ -91,24 +81,15 @@ export default function BolumlerPage() {
     if (!editId || !editAd.trim()) { setEditError("Bölüm adı boş bırakılamaz."); return; }
     setEditSaving(true);
     await updateBolum(editId, { ad: editAd.trim(), aciklama: editAciklama.trim(), soruIdleri: editSeciliIds });
-    setEditSaving(false);
-    setEditId(null);
-    load();
+    setEditSaving(false); setEditId(null); load();
   }
 
   async function handleDelete() {
     if (!deleteId) return;
     setDeleting(true);
     await deleteBolum(deleteId);
-    setDeleteId(null);
-    setDeleting(false);
-    load();
+    setDeleteId(null); setDeleting(false); load();
   }
-
-  const filtrelenmis = bolumler.filter((b) =>
-    b.ad.toLowerCase().includes(ara.toLowerCase()) ||
-    b.aciklama?.toLowerCase().includes(ara.toLowerCase())
-  );
 
   function CheckList({ sorular, seciliIds, onToggle, araVal, onAraChange }: {
     sorular: Soru[]; seciliIds: string[]; onToggle: (id: string) => void;
@@ -118,9 +99,7 @@ export default function BolumlerPage() {
     return (
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">
-            Soru Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span>
-          </p>
+          <p className="text-sm font-medium text-slate-700">Soru Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></p>
           {sorular.length > 5 && (
             <div className="relative">
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -138,7 +117,7 @@ export default function BolumlerPage() {
               return (
                 <button key={soru.id} type="button" onClick={() => onToggle(soru.id)}
                   className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${secili ? "bg-indigo-600 border-indigo-600" : "border-slate-300"}`}>
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-indigo-600 border-indigo-600" : "border-slate-300"}`}>
                     {secili && <Check size={10} className="text-white" />}
                   </div>
                   <span className={`flex-1 text-sm ${secili ? "text-indigo-700 font-medium" : "text-slate-700"}`}>{soru.metin}</span>
@@ -152,6 +131,46 @@ export default function BolumlerPage() {
     );
   }
 
+  const columns: DataColumn<Bolum>[] = [
+    {
+      key: "ad",
+      header: "Bölüm Adı",
+      searchValue: (b) => b.ad + " " + (b.aciklama ?? ""),
+      sortValue: (b) => b.ad,
+      cell: (b) => <span className="text-sm font-medium text-slate-800">{b.ad}</span>,
+    },
+    {
+      key: "aciklama",
+      header: "Açıklama",
+      cell: (b) => <span className="text-sm text-slate-500 line-clamp-1">{b.aciklama || <span className="text-slate-300">—</span>}</span>,
+    },
+    {
+      key: "soruSayisi",
+      header: "Soru Sayısı",
+      align: "center",
+      width: "110px",
+      sortValue: (b) => b.soruIdleri.length,
+      cell: (b) => (
+        <span className="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full">
+          {b.soruIdleri.length}
+        </span>
+      ),
+    },
+    {
+      key: "islemler",
+      header: "İşlemler",
+      align: "right",
+      width: "120px",
+      cell: (b) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => openDetay(b.id)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Detay"><Eye size={14} /></button>
+          <button onClick={() => openEdit(b.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle"><Pencil size={14} /></button>
+          <button onClick={() => setDeleteId(b.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Sil"><Trash2 size={14} /></button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -164,70 +183,10 @@ export default function BolumlerPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Bölüm ara..." value={ara} onChange={(e) => setAra(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50" />
-          </div>
-          {ara && <span className="text-xs text-slate-400">{filtrelenmis.length} sonuç</span>}
-        </div>
+      <DataTable data={bolumler} columns={columns} rowKey={(b) => b.id} loading={loading}
+        searchPlaceholder="Bölüm ara..." emptyIcon={Layers}
+        emptyTitle="Henüz bölüm yok" emptyDescription="Yeni bölüm eklemek için sağ üstteki butona tıklayın." />
 
-        {loading ? (
-          <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-        ) : filtrelenmis.length === 0 ? (
-          <EmptyState icon={Layers} title={ara ? "Eşleşen bölüm bulunamadı" : "Henüz bölüm yok"} description={ara ? "Arama teriminizi değiştirin." : "Yeni bölüm eklemek için sağ üstteki butona tıklayın."} />
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/80">
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bölüm Adı</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Açıklama</th>
-                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">Soru Sayısı</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filtrelenmis.map((bolum, i) => (
-                <tr key={bolum.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="px-4 py-3.5 text-sm text-slate-400 tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-3.5 text-sm font-medium text-slate-800">{bolum.ad}</td>
-                  <td className="px-4 py-3.5 text-sm text-slate-500 truncate max-w-xs">
-                    {bolum.aciklama || <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3.5 text-center">
-                    <span className="inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full">
-                      {bolum.soruIdleri.length}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openDetay(bolum.id)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Detay">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={() => openEdit(bolum.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => setDeleteId(bolum.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Sil">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && filtrelenmis.length > 0 && (
-          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-xs text-slate-400">{filtrelenmis.length} bölüm listeleniyor</p>
-          </div>
-        )}
-      </div>
-
-      {/* Yeni Bölüm Modal */}
       <Modal open={yeniAcik} onClose={() => setYeniAcik(false)} title="Yeni Bölüm" size="lg">
         <form onSubmit={handleYeniSave} className="space-y-5">
           <div>
@@ -248,52 +207,38 @@ export default function BolumlerPage() {
             <button type="submit" disabled={yeniSaving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
               {yeniSaving ? "Kaydediliyor..." : "Kaydet"}
             </button>
-            <button type="button" onClick={() => setYeniAcik(false)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-              İptal
-            </button>
+            <button type="button" onClick={() => setYeniAcik(false)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">İptal</button>
           </div>
         </form>
       </Modal>
 
-      {/* Detay Modal */}
       <Modal open={!!detayBolum || detayLoading} onClose={() => setDetayBolum(null)} title={detayBolum?.ad ?? "Bölüm Detayı"} size="lg">
-        {detayLoading ? (
-          <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-        ) : detayBolum ? (
+        {detayLoading ? <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div> : detayBolum ? (
           <div className="space-y-4">
-            {detayBolum.aciklama && (
-              <p className="text-sm text-slate-500 pb-2 border-b border-slate-100">{detayBolum.aciklama}</p>
+            {detayBolum.aciklama && <p className="text-sm text-slate-500 pb-2 border-b border-slate-100">{detayBolum.aciklama}</p>}
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sorular ({detayBolum.soruIdleri.length})</p>
+            {detayBolum.soruIdleri.length === 0 ? (
+              <p className="text-sm text-slate-400 py-6 text-center">Bu bölüme henüz soru atanmamış.</p>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {detayBolum.soruIdleri.map((soruId, i) => {
+                  const soru = detaySoruMap[soruId];
+                  return (
+                    <div key={soruId} className="flex items-center gap-3 py-3">
+                      <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-500 shrink-0">{i + 1}</span>
+                      <p className="flex-1 text-sm text-slate-700">{soru?.metin ?? <span className="italic text-slate-400">Soru bulunamadı</span>}</p>
+                      {soru && <span className="text-xs font-semibold text-indigo-600 shrink-0">{soru.puan} p</span>}
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                Sorular ({detayBolum.soruIdleri.length})
-              </p>
-              {detayBolum.soruIdleri.length === 0 ? (
-                <p className="text-sm text-slate-400 py-6 text-center">Bu bölüme henüz soru atanmamış.</p>
-              ) : (
-                <div className="divide-y divide-slate-50">
-                  {detayBolum.soruIdleri.map((soruId, i) => {
-                    const soru = detaySoruMap[soruId];
-                    return (
-                      <div key={soruId} className="flex items-center gap-3 py-3">
-                        <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-500 shrink-0">{i + 1}</span>
-                        <p className="flex-1 text-sm text-slate-700">{soru?.metin ?? <span className="italic text-slate-400">Soru bulunamadı</span>}</p>
-                        {soru && <span className="text-xs font-semibold text-indigo-600 shrink-0">{soru.puan} p</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
         ) : null}
       </Modal>
 
-      {/* Düzenle Modal */}
       <Modal open={!!editId} onClose={() => setEditId(null)} title="Bölümü Düzenle" size="lg">
-        {editLoading ? (
-          <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>
-        ) : (
+        {editLoading ? <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div> : (
           <form onSubmit={handleEditSave} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Bölüm Adı</label>
@@ -313,9 +258,7 @@ export default function BolumlerPage() {
               <button type="submit" disabled={editSaving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
                 {editSaving ? "Kaydediliyor..." : "Güncelle"}
               </button>
-              <button type="button" onClick={() => setEditId(null)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                İptal
-              </button>
+              <button type="button" onClick={() => setEditId(null)} className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">İptal</button>
             </div>
           </form>
         )}

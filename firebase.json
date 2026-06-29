@@ -2,11 +2,13 @@
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "redirects": [
+    "rewrites": [
       {
-        "source": "**",
-        "destination": "https://tgbkamera--tgbkamera.us-east4.hosted.app",
-        "type": 301
+        "source": "/**",
+        "run": {
+          "serviceId": "tgbkamera",
+          "region": "us-east4"
+        }
       }
     ]
   }

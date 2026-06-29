@@ -49,7 +49,7 @@ export default function BolumDuzenlePage() {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="w-full">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/bolumler" className="text-sm text-slate-500 hover:text-slate-700">Bölümler</Link>
         <span className="text-slate-300">/</span>
