@@ -1,5 +1,2 @@
 runConfig:
   runtime: nodejs22
-
-scripts:
-  buildCommand: npm install && npm run build
