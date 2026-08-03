@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { getForm, updateForm, getBolumler } from "@/lib/firestore";
-import type { Bolum } from "@/types";
+import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
+import { getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
+import type { Bolum, Soru } from "@/types";
 
 export default function FormDuzenlePage() {
   const router = useRouter();
@@ -14,15 +15,19 @@ export default function FormDuzenlePage() {
   const [aciklama, setAciklama] = useState("");
   const [puanli, setPuanli] = useState(true);
   const [bolumler, setBolumler] = useState<Bolum[]>([]);
+  const [sorularById, setSorularById] = useState<Record<string, Soru>>({});
   const [seciliIds, setSeciliIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([getForm(id), getBolumler()]).then(([form, tumBolumler]) => {
+    Promise.all([getForm(id), getBolumler(), getSorular()]).then(([form, tumBolumler, sorular]) => {
       if (form) { setAd(form.ad); setAciklama(form.aciklama); setPuanli(form.puanli); setSeciliIds(form.bolumIdleri); }
       setBolumler(tumBolumler);
+      const map: Record<string, Soru> = {};
+      sorular.forEach((s) => { map[s.id] = s; });
+      setSorularById(map);
       setLoading(false);
     });
   }, [id]);
@@ -37,8 +42,13 @@ export default function FormDuzenlePage() {
     e.preventDefault();
     if (!ad.trim()) { setError("Form adı boş bırakılamaz."); return; }
     setSaving(true);
-    await updateForm(id, { ad: ad.trim(), aciklama: aciklama.trim(), puanli, bolumIdleri: seciliIds });
-    router.push("/formlar");
+    try {
+      await updateForm(id, { ad: ad.trim(), aciklama: aciklama.trim(), puanli, bolumIdleri: seciliIds });
+      router.push("/formlar");
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
   }
 
   if (loading) {
@@ -104,29 +114,8 @@ export default function FormDuzenlePage() {
 
         <div className="bg-white rounded-2xl border border-slate-100 p-6">
           <h2 className="text-sm font-semibold text-slate-800 mb-4">Bölüm Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></h2>
-          {bolumler.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Henüz bölüm yok.</p>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {bolumler.map((bolum) => {
-                const secili = seciliIds.includes(bolum.id);
-                return (
-                  <button
-                    key={bolum.id}
-                    type="button"
-                    onClick={() => toggleBolum(bolum.id)}
-                    className={`flex items-center gap-3 w-full py-3 text-left transition-colors ${secili ? "text-indigo-700" : "text-slate-700"}`}
-                  >
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${secili ? "bg-indigo-600 border-indigo-600" : "border-slate-300"}`}>
-                      {secili && <Check size={12} className="text-white" />}
-                    </div>
-                    <span className="flex-1 text-sm">{bolum.ad}</span>
-                    <span className="text-xs text-slate-400 shrink-0">{bolum.soruIdleri.length} soru</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <BolumSecimListesi bolumler={bolumler} sorularById={sorularById} seciliIds={seciliIds}
+            formPuanli={puanli} onToggle={toggleBolum} boxed={false} />
         </div>
 
         <div className="flex items-center gap-3">

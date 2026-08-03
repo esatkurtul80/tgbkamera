@@ -6,6 +6,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
+import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
 import { getFormlar, deleteForm, createForm, getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
 import type { Form, Bolum, Soru, SkorlamaSistemi } from "@/types";
 
@@ -36,6 +37,7 @@ export default function FormlarPage() {
   const [yeniPuanli, setYeniPuanli] = useState(true);
   const [yeniSkorlamaSistemi, setYeniSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [yeniBolumler, setYeniBolumler] = useState<Bolum[]>([]);
+  const [yeniSorularById, setYeniSorularById] = useState<Record<string, Soru>>({});
   const [yeniSeciliIds, setYeniSeciliIds] = useState<string[]>([]);
   const [yeniBolumAra, setYeniBolumAra] = useState("");
   const [yeniSaving, setYeniSaving] = useState(false);
@@ -54,6 +56,7 @@ export default function FormlarPage() {
   const [editPuanli, setEditPuanli] = useState(true);
   const [editSkorlamaSistemi, setEditSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [editBolumler, setEditBolumler] = useState<Bolum[]>([]);
+  const [editSorularById, setEditSorularById] = useState<Record<string, Soru>>({});
   const [editSeciliIds, setEditSeciliIds] = useState<string[]>([]);
   const [editBolumAra, setEditBolumAra] = useState("");
   const [editLoading, setEditLoading] = useState(false);
@@ -70,8 +73,11 @@ export default function FormlarPage() {
   async function openYeni() {
     setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniSkorlamaSistemi("esik");
     setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
-    const b = await getBolumler();
+    const [b, sorular] = await Promise.all([getBolumler(), getSorular()]);
     setYeniBolumler(b);
+    const map: Record<string, Soru> = {};
+    sorular.forEach((s) => { map[s.id] = s; });
+    setYeniSorularById(map);
     setYeniAcik(true);
   }
 
@@ -79,16 +85,21 @@ export default function FormlarPage() {
     e.preventDefault();
     if (!yeniAd.trim()) { setYeniError("Form adı boş bırakılamaz."); return; }
     setYeniSaving(true);
-    await createForm({
-      ad: yeniAd.trim(),
-      aciklama: yeniAciklama.trim(),
-      puanli: yeniPuanli,
-      skorlamaSistemi: yeniPuanli ? yeniSkorlamaSistemi : undefined,
-      bolumIdleri: yeniSeciliIds,
-    });
-    setYeniSaving(false);
-    setYeniAcik(false);
-    load();
+    try {
+      await createForm({
+        ad: yeniAd.trim(),
+        aciklama: yeniAciklama.trim(),
+        puanli: yeniPuanli,
+        skorlamaSistemi: yeniPuanli ? yeniSkorlamaSistemi : undefined,
+        bolumIdleri: yeniSeciliIds,
+      });
+      setYeniAcik(false);
+      load();
+    } catch (err) {
+      setYeniError((err as Error).message);
+    } finally {
+      setYeniSaving(false);
+    }
   }
 
   async function openDetay(id: string) {
@@ -109,13 +120,16 @@ export default function FormlarPage() {
     setEditId(id);
     setEditLoading(true);
     setEditError(""); setEditBolumAra("");
-    const [f, tumBolumler] = await Promise.all([getForm(id), getBolumler()]);
+    const [f, tumBolumler, sorular] = await Promise.all([getForm(id), getBolumler(), getSorular()]);
     if (f) {
       setEditAd(f.ad); setEditAciklama(f.aciklama); setEditPuanli(f.puanli);
       setEditSkorlamaSistemi(f.skorlamaSistemi ?? "esik");
       setEditSeciliIds(f.bolumIdleri);
     }
     setEditBolumler(tumBolumler);
+    const map: Record<string, Soru> = {};
+    sorular.forEach((s) => { map[s.id] = s; });
+    setEditSorularById(map);
     setEditLoading(false);
   }
 
@@ -123,16 +137,21 @@ export default function FormlarPage() {
     e.preventDefault();
     if (!editId || !editAd.trim()) { setEditError("Form adı boş bırakılamaz."); return; }
     setEditSaving(true);
-    await updateForm(editId, {
-      ad: editAd.trim(),
-      aciklama: editAciklama.trim(),
-      puanli: editPuanli,
-      skorlamaSistemi: editPuanli ? editSkorlamaSistemi : undefined,
-      bolumIdleri: editSeciliIds,
-    });
-    setEditSaving(false);
-    setEditId(null);
-    load();
+    try {
+      await updateForm(editId, {
+        ad: editAd.trim(),
+        aciklama: editAciklama.trim(),
+        puanli: editPuanli,
+        skorlamaSistemi: editPuanli ? editSkorlamaSistemi : undefined,
+        bolumIdleri: editSeciliIds,
+      });
+      setEditId(null);
+      load();
+    } catch (err) {
+      setEditError((err as Error).message);
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function handleDelete() {
@@ -148,52 +167,6 @@ export default function FormlarPage() {
     f.ad.toLowerCase().includes(ara.toLowerCase()) ||
     f.aciklama?.toLowerCase().includes(ara.toLowerCase())
   );
-
-  function BolumCheckList({
-    bolumler, seciliIds, onToggle, araVal, onAraChange,
-  }: {
-    bolumler: Bolum[]; seciliIds: string[]; onToggle: (id: string) => void;
-    araVal: string; onAraChange: (v: string) => void;
-  }) {
-    const filtreli = bolumler.filter((b) => b.ad.toLowerCase().includes(araVal.toLowerCase()));
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">
-            Bölüm Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span>
-          </p>
-          {bolumler.length > 4 && (
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
-            </div>
-          )}
-        </div>
-        {bolumler.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">
-            Henüz bölüm yok. Önce bölüm oluşturun.
-          </p>
-        ) : (
-          <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-52 overflow-y-auto">
-            {filtreli.map((bolum) => {
-              const secili = seciliIds.includes(bolum.id);
-              return (
-                <button key={bolum.id} type="button" onClick={() => onToggle(bolum.id)}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${secili ? "bg-indigo-600 border-indigo-600" : "border-slate-300"}`}>
-                    {secili && <Check size={10} className="text-white" />}
-                  </div>
-                  <span className={`flex-1 text-sm ${secili ? "text-indigo-700 font-medium" : "text-slate-700"}`}>{bolum.ad}</span>
-                  <span className="text-xs text-slate-400 shrink-0">{bolum.soruIdleri.length} soru</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
 
   function SkorlamaSecimi({
     value, onChange,
@@ -351,7 +324,8 @@ export default function FormlarPage() {
           {yeniPuanli && (
             <SkorlamaSecimi value={yeniSkorlamaSistemi} onChange={setYeniSkorlamaSistemi} />
           )}
-          <BolumCheckList bolumler={yeniBolumler} seciliIds={yeniSeciliIds}
+          <BolumSecimListesi bolumler={yeniBolumler} sorularById={yeniSorularById} seciliIds={yeniSeciliIds}
+            formPuanli={yeniPuanli}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
             araVal={yeniBolumAra} onAraChange={setYeniBolumAra} />
           <div className="flex gap-3 pt-1">
@@ -399,7 +373,10 @@ export default function FormlarPage() {
                             <div key={soruId} className="flex items-center gap-3 px-4 py-2.5">
                               <span className="text-xs text-slate-400 w-4 shrink-0">{si + 1}.</span>
                               <p className="flex-1 text-sm text-slate-700">{soru?.metin ?? <span className="italic text-slate-400">—</span>}</p>
-                              {soru && detayForm.puanli && (
+                              {soru && soru.tip && (
+                                <div className="shrink-0"><Badge variant={soru.tip} /></div>
+                              )}
+                              {soru && !soru.tip && detayForm.puanli && (
                                 <div className="flex items-center gap-2 shrink-0">
                                   {soru.hedefYuzde !== undefined && (
                                     <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
@@ -453,7 +430,8 @@ export default function FormlarPage() {
             {editPuanli && (
               <SkorlamaSecimi value={editSkorlamaSistemi} onChange={setEditSkorlamaSistemi} />
             )}
-            <BolumCheckList bolumler={editBolumler} seciliIds={editSeciliIds}
+            <BolumSecimListesi bolumler={editBolumler} sorularById={editSorularById} seciliIds={editSeciliIds}
+              formPuanli={editPuanli}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
               araVal={editBolumAra} onAraChange={setEditBolumAra} />
             <div className="flex gap-3 pt-1">

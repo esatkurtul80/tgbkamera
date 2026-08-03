@@ -1,4 +1,4 @@
-import type { KullaniciRol } from "@/types";
+import type { KullaniciRol, SoruTipi } from "@/types";
 
 type BadgeVariant =
   | "puanli"
@@ -7,7 +7,8 @@ type BadgeVariant =
   | "pasif"
   | "esik"
   | "oran"
-  | KullaniciRol;
+  | KullaniciRol
+  | SoruTipi;
 
 const styles: Record<BadgeVariant, string> = {
   puanli: "bg-indigo-50 text-indigo-600",
@@ -22,6 +23,12 @@ const styles: Record<BadgeVariant, string> = {
   bolge_muduru: "bg-blue-50 text-blue-700",
   magaza_sorumlusu: "bg-teal-50 text-teal-700",
   kameraman: "bg-slate-100 text-slate-600",
+  evet_hayir_muaf: "bg-indigo-50 text-indigo-600",
+  sayi: "bg-cyan-50 text-cyan-600",
+  tarih: "bg-fuchsia-50 text-fuchsia-600",
+  saat: "bg-purple-50 text-purple-600",
+  kisa_metin: "bg-lime-50 text-lime-700",
+  yorum: "bg-pink-50 text-pink-600",
 };
 
 const labels: Record<BadgeVariant, string> = {
@@ -37,6 +44,12 @@ const labels: Record<BadgeVariant, string> = {
   bolge_muduru: "Bölge Müdürü",
   magaza_sorumlusu: "Mağaza Sorumlusu",
   kameraman: "Kameraman",
+  evet_hayir_muaf: "Evet/Hayır/Muaf",
+  sayi: "Sayı",
+  tarih: "Tarih",
+  saat: "Saat",
+  kisa_metin: "Kısa Metin",
+  yorum: "Yorum",
 };
 
 interface BadgeProps {

@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Camera, CheckCircle2, XCircle, MinusCircle, Target } from "lucide-react";
+import { Camera, CheckCircle2, XCircle, MinusCircle, Target, User, Store, Calendar, FileSpreadsheet, FileDown } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import { getDegerlendirme } from "@/lib/firestore";
 import { soruPuanHesapla } from "@/lib/skorlama";
+import PuansizRaporIcerik from "@/components/degerlendirme/PuansizRaporIcerik";
 import type { Degerlendirme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -21,10 +22,34 @@ export default function DegerlendirmeRaporPage() {
   const { id } = useParams<{ id: string }>();
   const [d, setD] = useState<Degerlendirme | null>(null);
   const [loading, setLoading] = useState(true);
+  const [excelIndiriliyor, setExcelIndiriliyor] = useState(false);
+  const [pdfIndiriliyor, setPdfIndiriliyor] = useState(false);
 
   useEffect(() => {
     getDegerlendirme(id).then(data => { setD(data); setLoading(false); });
   }, [id]);
+
+  async function handleExcelIndir() {
+    if (!d) return;
+    setExcelIndiriliyor(true);
+    try {
+      const { degerlendirmeExcelIndir } = await import("@/lib/excelExport");
+      await degerlendirmeExcelIndir(d);
+    } finally {
+      setExcelIndiriliyor(false);
+    }
+  }
+
+  async function handlePdfIndir() {
+    if (!d) return;
+    setPdfIndiriliyor(true);
+    try {
+      const { degerlendirmePdfIndir } = await import("@/lib/pdfExport");
+      await degerlendirmePdfIndir(d);
+    } finally {
+      setPdfIndiriliyor(false);
+    }
+  }
 
   if (loading) return (
     <div className="flex justify-center py-16">
@@ -36,6 +61,8 @@ export default function DegerlendirmeRaporPage() {
 
   // Eski format desteği
   const isLegacy = !d.izlenmeler || d.izlenmeler.length === 0;
+  // Yeni tek-seferlik puansız format: puansizCevaplar alanı doldurulmuş (bug düzeltmesi sonrası oluşturulan kayıtlar)
+  const isPuansizNewFormat = d.puanli === false && d.puansizCevaplar !== undefined;
   const bolumSirasi = Object.keys(d.bolumSnapshot);
   const sistem = d.skorlamaSistemi ?? "oran";
 
@@ -61,34 +88,53 @@ export default function DegerlendirmeRaporPage() {
         <Link href="/degerlendirmeler" className="text-sm text-slate-500 hover:text-slate-700">Değerlendirmeler</Link>
         <span className="text-slate-300">/</span>
         <span className="text-sm font-semibold text-slate-800">Rapor</span>
-        <button onClick={() => window.print()}
-          className="ml-auto px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-          Yazdır
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {!isPuansizNewFormat && !isLegacy && (
+            <button onClick={handleExcelIndir} disabled={excelIndiriliyor}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60">
+              <FileSpreadsheet size={13} />
+              {excelIndiriliyor ? "Hazırlanıyor..." : "Excel İndir"}
+            </button>
+          )}
+          {isPuansizNewFormat && (
+            <button onClick={handlePdfIndir} disabled={pdfIndiriliyor}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors disabled:opacity-60">
+              <FileDown size={13} />
+              {pdfIndiriliyor ? "Hazırlanıyor..." : "PDF İndir"}
+            </button>
+          )}
+          <button onClick={() => window.print()}
+            className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+            Yazdır
+          </button>
+        </div>
       </div>
 
-      {/* Özet kart */}
+      {/* ── Puansız (tek seferlik) format ───────────────────────────────── */}
+      {isPuansizNewFormat && <PuansizRaporIcerik d={d} />}
+
+      {/* Özet kart (puanlı matris / eski format) */}
+      {!isPuansizNewFormat && (
       <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-4">
         <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-bold text-slate-900">{d.formAd}</h1>
               <Badge variant={d.puanli ? "puanli" : "puansiz"} />
             </div>
-            <p className="text-sm text-slate-600"><span className="font-medium">Personel:</span> {d.personelAd}</p>
-            {d.magazaAd && <p className="text-sm text-slate-600"><span className="font-medium">Mağaza:</span> {d.magazaAd}</p>}
-            <p className="text-sm text-slate-600">
-              <span className="font-medium">Dönem:</span>{" "}
-              {d.ay !== undefined ? `${AYLAR[d.ay]} ${d.yil}` : d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—"}
-            </p>
-            {d.kameramanAd && (
-              <p className="text-sm text-slate-600 inline-flex items-center gap-1">
-                <span className="font-medium">Kameraman:</span>
-                <span className="inline-flex items-center gap-1 text-violet-700">
-                  <Camera size={12} /> {d.kameramanAd}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600">
+              <span className="inline-flex items-center gap-1.5"><User size={13} className="text-slate-400" /> {d.personelAd}</span>
+              {d.magazaAd && <span className="inline-flex items-center gap-1.5"><Store size={13} className="text-slate-400" /> {d.magazaAd}</span>}
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar size={13} className="text-slate-400" />
+                {d.ay !== undefined ? `${AYLAR[d.ay]} ${d.yil}` : d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—"}
+              </span>
+              {d.kameramanAd && (
+                <span className="inline-flex items-center gap-1.5 text-violet-700">
+                  <Camera size={13} /> {d.kameramanAd}
                 </span>
-              </p>
-            )}
+              )}
+            </div>
             <p className="text-xs text-slate-400">{siralanmis.length} izlenme kaydı</p>
           </div>
           {d.puanli && d.toplamPuan !== null && (
@@ -106,9 +152,10 @@ export default function DegerlendirmeRaporPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Yeni format: Matris tablosu ──────────────────────────────────── */}
-      {!isLegacy && (
+      {!isPuansizNewFormat && !isLegacy && (
         <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm" style={{ minWidth: `${300 + siralanmis.length * 90}px` }}>
@@ -220,7 +267,7 @@ export default function DegerlendirmeRaporPage() {
       )}
 
       {/* ── Eski format (legacy): Klasik liste görünümü ───────────────────── */}
-      {isLegacy && (
+      {!isPuansizNewFormat && isLegacy && (
         <div className="space-y-4">
           {bolumSirasi.map(bolumId => {
             const bolum = d.bolumSnapshot[bolumId];

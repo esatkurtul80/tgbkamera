@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateCustomId } from "@/lib/idUtils";
+import { bolumKarisikMi, bolumFormaUygunMu } from "@/lib/homojenlik";
 import type {
   Soru,
   Bolum,
@@ -29,6 +30,7 @@ import type {
   Magaza,
   KullaniciRol,
   SkorlamaSistemi,
+  SoruTipi,
 } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -212,6 +214,7 @@ export async function createSoru(data: {
   metin: string;
   puan: number;
   hedefYuzde?: number;
+  tip?: SoruTipi;
 }): Promise<string> {
   const customId = generateCustomId(data.metin);
   await setDoc(doc(db, "sorular", customId), {
@@ -224,13 +227,22 @@ export async function createSoru(data: {
 
 export async function updateSoru(
   id: string,
-  data: { metin: string; puan: number; hedefYuzde?: number }
+  data: { metin: string; puan: number; hedefYuzde?: number; tip?: SoruTipi }
 ): Promise<void> {
   await updateDoc(doc(db, "sorular", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
 
 export async function deleteSoru(id: string): Promise<void> {
   await deleteDoc(doc(db, "sorular", id));
+}
+
+// ─── Homojenlik yardımcıları ──────────────────────────────────────────────
+
+async function sorularByIdFor(ids: string[]): Promise<Record<string, Soru>> {
+  const bulunanlar = await Promise.all(ids.map((id) => getSoru(id)));
+  const map: Record<string, Soru> = {};
+  bulunanlar.forEach((s) => { if (s) map[s.id] = s; });
+  return map;
 }
 
 // ─── Bölümler ───────────────────────────────────────────────────────────────
@@ -250,6 +262,12 @@ export async function createBolum(data: {
   aciklama: string;
   soruIdleri: string[];
 }): Promise<string> {
+  if (data.soruIdleri.length > 0) {
+    const sorularById = await sorularByIdFor(data.soruIdleri);
+    if (bolumKarisikMi(data.soruIdleri, sorularById)) {
+      throw new Error("Bölüm karışık soru tiplerinden oluşamaz (puanlı ve puansız sorular aynı bölümde olamaz).");
+    }
+  }
   const customId = generateCustomId(data.ad);
   await setDoc(doc(db, "bolumler", customId), {
     ...cleanData(data),
@@ -263,6 +281,12 @@ export async function updateBolum(
   id: string,
   data: { ad: string; aciklama: string; soruIdleri: string[] }
 ): Promise<void> {
+  if (data.soruIdleri.length > 0) {
+    const sorularById = await sorularByIdFor(data.soruIdleri);
+    if (bolumKarisikMi(data.soruIdleri, sorularById)) {
+      throw new Error("Bölüm karışık soru tiplerinden oluşamaz (puanlı ve puansız sorular aynı bölümde olamaz).");
+    }
+  }
   await updateDoc(doc(db, "bolumler", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
 
@@ -282,6 +306,22 @@ export async function getForm(id: string): Promise<Form | null> {
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Form) : null;
 }
 
+async function bolumIdleriniDogrula(bolumIdleri: string[], puanli: boolean): Promise<void> {
+  for (const bolumId of bolumIdleri) {
+    const bolum = await getBolum(bolumId);
+    if (!bolum || bolum.soruIdleri.length === 0) continue;
+    const sorularById = await sorularByIdFor(bolum.soruIdleri);
+    if (bolumKarisikMi(bolum.soruIdleri, sorularById)) {
+      throw new Error(`"${bolum.ad}" bölümü karışık soru tiplerinden oluşuyor, forma atanamaz.`);
+    }
+    if (!bolumFormaUygunMu(bolum.soruIdleri, sorularById, puanli)) {
+      throw new Error(
+        `"${bolum.ad}" bölümü ${puanli ? "puansız" : "puanlı"} sorulardan oluşuyor, ${puanli ? "puanlı" : "puansız"} forma atanamaz.`
+      );
+    }
+  }
+}
+
 export async function createForm(data: {
   ad: string;
   aciklama: string;
@@ -289,6 +329,7 @@ export async function createForm(data: {
   skorlamaSistemi?: SkorlamaSistemi;
   bolumIdleri: string[];
 }): Promise<string> {
+  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli);
   const customId = generateCustomId(data.ad);
   await setDoc(doc(db, "formlar", customId), {
     ...cleanData(data),
@@ -308,6 +349,7 @@ export async function updateForm(
     bolumIdleri: string[];
   }
 ): Promise<void> {
+  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli);
   await updateDoc(doc(db, "formlar", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
 
@@ -415,9 +457,10 @@ export async function getDegerlendirme(id: string): Promise<Degerlendirme | null
 }
 
 export async function createDegerlendirme(
-  data: Omit<Degerlendirme, "id" | "olusturmaTarihi">
+  data: Omit<Degerlendirme, "id" | "olusturmaTarihi">,
+  id?: string
 ): Promise<string> {
-  const customId = generateCustomId(data.personelAd);
+  const customId = id ?? generateCustomId(data.personelAd);
   await setDoc(doc(db, "degerlendirmeler", customId), {
     ...cleanData(data),
     olusturmaTarihi: serverTimestamp(),
@@ -441,6 +484,10 @@ export async function updateDegerlendirme(
     formAd?: string;
     izlenmeTarihi?: Timestamp;
     cevaplar?: Record<string, import("@/types").CevapSecenegi>;
+    puansizCevaplar?: Record<string, import("@/types").PuansizCevapDegeri>;
+    bolumSnapshot?: Record<string, import("@/types").BolumSnapshot>;
+    soruSnapshot?: Record<string, import("@/types").SoruSnapshot>;
+    durum?: import("@/types").DegerlendirmeDurum;
     toplamPuan?: number | null;
     maxPuan?: number | null;
   }

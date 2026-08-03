@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { Camera } from "lucide-react";
+import { Camera, User, Store, Calendar, Check } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
 import {
   getDegerlendirme,
@@ -11,7 +11,11 @@ import {
   updateDegerlendirmeIzlenmeler,
 } from "@/lib/firestore";
 import { hesaplaPuanFromIzlenmeler, hesaplaPuan } from "@/lib/skorlama";
-import type { Degerlendirme, CevapSecenegi, SoruIzlenme } from "@/types";
+import { uploadDegerlendirmeFoto } from "@/lib/storage";
+import { puansizCevapDoluMu } from "@/lib/puansiz";
+import { PuansizCevapInput, PuansizNotAlani } from "@/components/degerlendirme/PuansizCevapAlani";
+import PuansizFotoStrip from "@/components/degerlendirme/PuansizFotoStrip";
+import type { Degerlendirme, CevapSecenegi, SoruIzlenme, PuansizCevapDegeri } from "@/types";
 
 const OPTS: { value: CevapSecenegi; label: string }[] = [
   { value: "evet",  label: "E" },
@@ -41,6 +45,10 @@ export default function DegerlendirmeDuzenlePage() {
   // Matris format
   const [izlenmeler, setIzlenmeler] = useState<SoruIzlenme[]>([]);
 
+  // Puansız (tek seferlik) format
+  const [puansizCevaplar, setPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri>>({});
+  const [pendingFotolar, setPendingFotolar] = useState<Record<string, { file: File; url: string }[]>>({});
+
   useEffect(() => {
     getDegerlendirme(id).then(d => {
       if (d) {
@@ -49,10 +57,35 @@ export default function DegerlendirmeDuzenlePage() {
         setIzlenmeTarihi(tarih ? tarih.toISOString().split("T")[0] : "");
         setCevaplar({ ...(d.cevaplar ?? {}) });
         setIzlenmeler(d.izlenmeler ? d.izlenmeler.map(iz => ({ ...iz, cevaplar: { ...iz.cevaplar } })) : []);
+        setPuansizCevaplar({ ...(d.puansizCevaplar ?? {}) });
       }
       setLoading(false);
     });
   }, [id]);
+
+  function setPuansizCevap(soruId: string, patch: Partial<PuansizCevapDegeri>) {
+    setPuansizCevaplar(prev => ({ ...prev, [soruId]: { ...prev[soruId], ...patch } }));
+  }
+
+  function puansizFotoEkle(soruId: string, files: File[]) {
+    const yeni = files.map(file => ({ file, url: URL.createObjectURL(file) }));
+    setPendingFotolar(prev => ({ ...prev, [soruId]: [...(prev[soruId] ?? []), ...yeni] }));
+  }
+
+  function puansizFotoSil(soruId: string, index: number) {
+    setPendingFotolar(prev => {
+      const silinen = prev[soruId]?.[index];
+      if (silinen) URL.revokeObjectURL(silinen.url);
+      return { ...prev, [soruId]: (prev[soruId] ?? []).filter((_, i) => i !== index) };
+    });
+  }
+
+  function mevcutFotoSil(soruId: string, url: string) {
+    setPuansizCevaplar(prev => ({
+      ...prev,
+      [soruId]: { ...prev[soruId], fotograflar: (prev[soruId]?.fotograflar ?? []).filter(u => u !== url) },
+    }));
+  }
 
   function setCevapMatris(izlenmeId: string, soruId: string, opt: CevapSecenegi) {
     setIzlenmeler(prev =>
@@ -69,7 +102,31 @@ export default function DegerlendirmeDuzenlePage() {
     if (!data) return;
     setSaving(true);
 
-    if (isLegacy) {
+    if (isPuansizNewFormat) {
+      const entries = await Promise.all(
+        Object.entries(pendingFotolar).map(async ([soruId, items]): Promise<[string, PuansizCevapDegeri]> => {
+          if (items.length === 0) return [soruId, puansizCevaplar[soruId]];
+          const yuklenenler = await Promise.all(
+            items.map((it, i) =>
+              uploadDegerlendirmeFoto(
+                { degerlendirmeId: id, soruId, magazaAd: data.magazaAd, personelAd: data.personelAd, tarih: izlenmeTarihi },
+                it.file,
+                i
+              )
+            )
+          );
+          const mevcut = puansizCevaplar[soruId]?.fotograflar ?? [];
+          return [soruId, { ...puansizCevaplar[soruId], fotograflar: [...mevcut, ...yuklenenler] }];
+        })
+      );
+      const guncelPuansizCevaplar = { ...puansizCevaplar };
+      entries.forEach(([soruId, cevap]) => { if (cevap) guncelPuansizCevaplar[soruId] = cevap; });
+
+      await updateDegerlendirme(id, {
+        ...(izlenmeTarihi ? { izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi)) } : {}),
+        puansizCevaplar: guncelPuansizCevaplar,
+      });
+    } else if (isLegacy) {
       let toplamPuan: number | null = null;
       let maxPuan: number | null = null;
       if (data.puanli) {
@@ -109,6 +166,7 @@ export default function DegerlendirmeDuzenlePage() {
   if (!data) return <p className="text-sm text-slate-500">Değerlendirme bulunamadı.</p>;
 
   const isLegacy = !data.izlenmeler || data.izlenmeler.length === 0;
+  const isPuansizNewFormat = data.puanli === false && data.puansizCevaplar !== undefined;
   const bolumSirasi = Object.keys(data.bolumSnapshot);
 
   const siralanmis = [...izlenmeler].sort((a, b) => a.tarih.toMillis() - b.tarih.toMillis());
@@ -142,17 +200,17 @@ export default function DegerlendirmeDuzenlePage() {
         {/* Bilgi + eylem kartı */}
         <div className="bg-white rounded-2xl border border-slate-100 p-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="text-base font-bold text-slate-900">{data.formAd}</p>
-              <p className="text-sm text-slate-600"><span className="font-medium">Personel:</span> {data.personelAd}</p>
-              {data.magazaAd && (
-                <p className="text-sm text-slate-600"><span className="font-medium">Mağaza:</span> {data.magazaAd}</p>
-              )}
-              {data.kameramanAd && (
-                <p className="text-sm text-violet-700 inline-flex items-center gap-1">
-                  <Camera size={12} /> {data.kameramanAd}
-                </p>
-              )}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600">
+                <span className="inline-flex items-center gap-1.5"><User size={13} className="text-slate-400" /> {data.personelAd}</span>
+                {data.magazaAd && <span className="inline-flex items-center gap-1.5"><Store size={13} className="text-slate-400" /> {data.magazaAd}</span>}
+                {data.kameramanAd && (
+                  <span className="inline-flex items-center gap-1.5 text-violet-700">
+                    <Camera size={13} /> {data.kameramanAd}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -171,21 +229,80 @@ export default function DegerlendirmeDuzenlePage() {
             </div>
           </div>
 
-          {isLegacy && (
+          {(isLegacy || isPuansizNewFormat) && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <label className="block text-xs font-medium text-slate-600 mb-1.5">İzlenme Tarihi</label>
-              <input
-                type="date"
-                value={izlenmeTarihi}
-                onChange={e => setIzlenmeTarihi(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full max-w-xs"
-              />
+              <div className="relative w-full max-w-xs">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={izlenmeTarihi}
+                  onChange={e => setIzlenmeTarihi(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
             </div>
           )}
         </div>
 
+        {/* ── Puansız (tek seferlik) format: Düzenlenebilir cevap listesi ──── */}
+        {isPuansizNewFormat && (
+          <div className="space-y-4">
+            {bolumSirasi.map(bolumId => {
+              const bolum = data.bolumSnapshot[bolumId];
+              const cevaplanan = bolum.soruIdleri.filter(sid => {
+                const soru = data.soruSnapshot[sid];
+                return puansizCevapDoluMu(soru?.tip ?? "evet_hayir_muaf", puansizCevaplar[sid]);
+              }).length;
+              return (
+                <div key={bolumId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-800">{bolum.ad}</p>
+                    <span className="text-xs font-medium text-slate-400">{cevaplanan}/{bolum.soruIdleri.length}</span>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {bolum.soruIdleri.map((soruId, idx) => {
+                      const soru = data.soruSnapshot[soruId];
+                      const tip = soru?.tip ?? "evet_hayir_muaf";
+                      const cevap = puansizCevaplar[soruId];
+                      const cevaplandi = puansizCevapDoluMu(tip, cevap);
+                      return (
+                        <div key={soruId} className="px-5 py-4 hover:bg-slate-50/50 transition-colors">
+                          <div className="flex items-start gap-3 mb-3">
+                            <div
+                              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-bold transition-colors ${
+                                cevaplandi ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"
+                              }`}
+                            >
+                              {cevaplandi ? <Check size={12} /> : idx + 1}
+                            </div>
+                            <p className="flex-1 text-sm font-medium text-slate-700 leading-snug pt-0.5">{soru?.metin}</p>
+                          </div>
+                          <div className="ml-9 space-y-2.5">
+                            <PuansizCevapInput tip={tip} cevap={cevap} onChange={patch => setPuansizCevap(soruId, patch)} />
+                            <PuansizFotoStrip
+                              fotograflar={[
+                                ...(cevap?.fotograflar ?? []).map(url => ({ url, onSil: () => mevcutFotoSil(soruId, url) })),
+                                ...(pendingFotolar[soruId] ?? []).map((f, i) => ({ url: f.url, onSil: () => puansizFotoSil(soruId, i) })),
+                              ]}
+                              onEkle={files => puansizFotoEkle(soruId, files)}
+                            />
+                            {tip !== "yorum" && (
+                              <PuansizNotAlani deger={cevap?.yorum} onChange={v => setPuansizCevap(soruId, { yorum: v })} />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ── Eski format: Cevap listesi ───────────────────────────────────── */}
-        {isLegacy && (
+        {!isPuansizNewFormat && isLegacy && (
           <div className="space-y-3">
             {bolumSirasi.map(bolumId => {
               const bolum = data.bolumSnapshot[bolumId];
@@ -225,7 +342,7 @@ export default function DegerlendirmeDuzenlePage() {
         )}
 
         {/* ── Yeni format: Düzenlenebilir matris ──────────────────────────── */}
-        {!isLegacy && (
+        {!isPuansizNewFormat && !isLegacy && (
           <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table

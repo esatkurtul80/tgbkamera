@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardList, Plus, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play } from "lucide-react";
+import { ClipboardList, Plus, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
@@ -138,12 +138,21 @@ function KameramanDegerlendirmelerView() {
       width: "130px",
       cell: (d) =>
         d.durum === "acik" ? (
-          <Link
-            href={`/degerlendirmeler/yeni?devam=${d.id}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
-          >
-            <Play size={9} fill="currentColor" /> Devam Et
-          </Link>
+          <div className="flex items-center justify-end gap-1">
+            <Link
+              href={`/degerlendirmeler/${d.id}`}
+              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+              title="Ara Raporu Gör"
+            >
+              <Eye size={14} />
+            </Link>
+            <Link
+              href={`/degerlendirmeler/yeni?devam=${d.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+            >
+              <Play size={9} fill="currentColor" /> Devam Et
+            </Link>
+          </div>
         ) : (
           <Link
             href={`/degerlendirmeler/${d.id}`}
@@ -210,10 +219,58 @@ function AdminDegerlendirmelerView() {
   const [silId, setSilId] = useState<string | null>(null);
   const [siliyor, setSiliyor] = useState(false);
 
+  const [secilenler, setSecilenler] = useState<Set<string>>(new Set());
+  const [excelIndiriliyor, setExcelIndiriliyor] = useState(false);
+  const [excelIlerleme, setExcelIlerleme] = useState<{ tamamlanan: number; toplam: number } | null>(null);
+
+  function toggleSecim(id: string) {
+    setSecilenler((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTumu() {
+    setSecilenler((prev) =>
+      liste.length > 0 && prev.size === liste.length ? new Set() : new Set(liste.map((d) => d.id))
+    );
+  }
+
+  async function handleExcelIndir() {
+    setExcelIndiriliyor(true);
+    try {
+      if (secilenler.size > 0) {
+        const seciliKayitlar = liste.filter((d) => secilenler.has(d.id));
+        const { secilenleriAyriAyriIndir } = await import("@/lib/raporIndir");
+        setExcelIlerleme({ tamamlanan: 0, toplam: seciliKayitlar.length });
+        await secilenleriAyriAyriIndir(seciliKayitlar, (tamamlanan, toplam) =>
+          setExcelIlerleme({ tamamlanan, toplam })
+        );
+      } else {
+        if (liste.length === 0) return;
+        const { degerlendirmeListesiExcelIndir } = await import("@/lib/excelExport");
+        await degerlendirmeListesiExcelIndir(liste);
+      }
+    } finally {
+      setExcelIndiriliyor(false);
+      setExcelIlerleme(null);
+    }
+  }
+
+  function acikOnce(d: Degerlendirme[]): Degerlendirme[] {
+    return [...d].sort((a, b) => {
+      if (a.durum === "acik" && b.durum !== "acik") return -1;
+      if (a.durum !== "acik" && b.durum === "acik") return 1;
+      return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
+    });
+  }
+
   useEffect(() => {
     Promise.all([getDegerlendirmeler(), getFormlar(), getPersoneller(), getMagazalar()]).then(
       ([d, f, p, m]) => {
-        setListe(d);
+        setListe(acikOnce(d));
         setFormlar(f);
         setPersoneller(p);
         setMagazalar(m);
@@ -224,11 +281,12 @@ function AdminDegerlendirmelerView() {
 
   async function applyFilter() {
     setLoading(true);
+    setSecilenler(new Set());
     const filters: Parameters<typeof getDegerlendirmeler>[0] = {};
     if (filtrePersonel) filters.personelId = filtrePersonel;
     else if (filtreMagaza) filters.magazaId = filtreMagaza;
     else if (filtreForm) filters.formId = filtreForm;
-    setListe(await getDegerlendirmeler(filters));
+    setListe(acikOnce(await getDegerlendirmeler(filters)));
     setLoading(false);
   }
 
@@ -236,8 +294,9 @@ function AdminDegerlendirmelerView() {
     setFiltrePersonel("");
     setFiltreForm("");
     setFiltreMagaza("");
+    setSecilenler(new Set());
     setLoading(true);
-    setListe(await getDegerlendirmeler());
+    setListe(acikOnce(await getDegerlendirmeler()));
     setLoading(false);
   }
 
@@ -246,13 +305,60 @@ function AdminDegerlendirmelerView() {
     setSiliyor(true);
     await deleteDegerlendirme(silId);
     setListe((prev) => prev.filter((d) => d.id !== silId));
+    setSecilenler((prev) => {
+      if (!prev.has(silId)) return prev;
+      const next = new Set(prev);
+      next.delete(silId);
+      return next;
+    });
     setSilId(null);
     setSiliyor(false);
   }
 
   const hasFilter = filtrePersonel || filtreForm || filtreMagaza;
+  const acikSayisi = liste.filter((d) => d.durum === "acik").length;
 
   const columns: DataColumn<Degerlendirme>[] = [
+    {
+      key: "sec",
+      header: (
+        <input
+          type="checkbox"
+          title="Listedeki tüm kayıtları seç"
+          checked={liste.length > 0 && secilenler.size === liste.length}
+          onChange={toggleTumu}
+          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+        />
+      ),
+      width: "36px",
+      align: "center",
+      cell: (d) => (
+        <input
+          type="checkbox"
+          checked={secilenler.has(d.id)}
+          onChange={() => toggleSecim(d.id)}
+          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+        />
+      ),
+    },
+    {
+      key: "durum",
+      header: "Durum",
+      width: "140px",
+      sortValue: (d) => (d.durum === "acik" ? 1 : 0),
+      cell: (d) =>
+        d.durum === "acik" ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            Devam Ediyor
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full whitespace-nowrap">
+            <CheckCircle2 size={11} />
+            Tamamlandı
+          </span>
+        ),
+    },
     {
       key: "izlenmeTarihi",
       header: "İzlenme Tarihi",
@@ -358,23 +464,43 @@ function AdminDegerlendirmelerView() {
       key: "aksiyonlar",
       header: "",
       align: "right",
-      width: "100px",
+      width: "160px",
       cell: (d) => (
         <div className="flex items-center justify-end gap-1">
-          <Link
-            href={`/degerlendirmeler/${d.id}`}
-            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
-            title="Raporu Görüntüle"
-          >
-            <Eye size={14} />
-          </Link>
-          <Link
-            href={`/degerlendirmeler/${d.id}/duzenle`}
-            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex"
-            title="Düzenle"
-          >
-            <Pencil size={14} />
-          </Link>
+          {d.durum === "acik" ? (
+            <>
+              <Link
+                href={`/degerlendirmeler/${d.id}`}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+                title="Ara Raporu Gör"
+              >
+                <Eye size={14} />
+              </Link>
+              <Link
+                href={`/degerlendirmeler/yeni?devam=${d.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+              >
+                <Play size={9} fill="currentColor" /> Devam Et
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href={`/degerlendirmeler/${d.id}`}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+                title="Raporu Görüntüle"
+              >
+                <Eye size={14} />
+              </Link>
+              <Link
+                href={`/degerlendirmeler/${d.id}/duzenle`}
+                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex"
+                title="Düzenle"
+              >
+                <Pencil size={14} />
+              </Link>
+            </>
+          )}
           <button
             onClick={() => setSilId(d.id)}
             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -461,13 +587,47 @@ function AdminDegerlendirmelerView() {
           <h1 className="text-xl font-bold text-slate-900">Değerlendirmeler</h1>
           <p className="text-sm text-slate-500 mt-0.5">{liste.length} kayıt</p>
         </div>
-        <Link
-          href="/degerlendirmeler/yeni"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          <Plus size={15} /> Yeni Değerlendirme
-        </Link>
+        <div className="flex items-center gap-3">
+          {acikSayisi > 0 && (
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              {acikSayisi} devam eden rapor
+            </div>
+          )}
+          {secilenler.size > 0 && (
+            <button
+              onClick={() => setSecilenler(new Set())}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors"
+            >
+              {secilenler.size} seçili <X size={12} />
+            </button>
+          )}
+          <button
+            onClick={handleExcelIndir}
+            disabled={liste.length === 0 || excelIndiriliyor}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+          >
+            <FileSpreadsheet size={15} />
+            {excelIlerleme
+              ? `İndiriliyor... (${excelIlerleme.tamamlanan}/${excelIlerleme.toplam})`
+              : secilenler.size > 0
+              ? `Seçilenlerin Raporunu İndir (${secilenler.size} dosya)`
+              : `Excel İndir (${liste.length})`}
+          </button>
+          <Link
+            href="/degerlendirmeler/yeni"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus size={15} /> Yeni Değerlendirme
+          </Link>
+        </div>
       </div>
+      {secilenler.size > 1 && (
+        <p className="text-xs text-slate-400 -mt-3">
+          Seçili {secilenler.size} kayıt için ayrı ayrı {secilenler.size} dosya inecek. Tarayıcınız
+          birden fazla dosya indirmek için izin isteyebilir, "İzin Ver"i seçin.
+        </p>
+      )}
 
       <DataTable
         data={liste}

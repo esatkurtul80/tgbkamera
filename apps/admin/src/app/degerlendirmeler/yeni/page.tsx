@@ -7,11 +7,12 @@ import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, 
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
-  getDegerlendirme, updateDegerlendirmeIzlenmeler, finalizeDegerlendirme,
+  getDegerlendirme, getAcikDegerlendirmeler, updateDegerlendirmeIzlenmeler, finalizeDegerlendirme,
 } from "@/lib/firestore";
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from "@/lib/skorlama";
+import PuansizDegerlendirmeFormu from "@/components/degerlendirme/PuansizDegerlendirmeFormu";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Form, Personel, Bolum, Soru, CevapSecenegi, BolumSnapshot, SoruSnapshot, Magaza } from "@/types";
+import type { Form, Personel, Bolum, Soru, CevapSecenegi, BolumSnapshot, SoruSnapshot, Magaza, PuansizCevapDegeri } from "@/types";
 import { Timestamp } from "firebase/firestore";
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
@@ -145,8 +146,14 @@ function YeniDegerlendirmeIcerik() {
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
   const [degId, setDegId] = useState<string | null>(null);
+  // Devam edilen açık puansız raporun mevcut cevapları (varsa)
+  const [devamPuansizCevaplar, setDevamPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri> | undefined>(undefined);
+  const [devamIzlenmeTarihi, setDevamIzlenmeTarihi] = useState<string | undefined>(undefined);
   // Otomatik kayıt debounce timer ref
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Aynı parametrelerle (React Strict Mode'un effect'i iki kez çalıştırması,
+  // hızlı art arda tıklama vb.) birden fazla açık rapor oluşturulmasını engeller.
+  const olusturulanAnahtarRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -192,6 +199,8 @@ function YeniDegerlendirmeIcerik() {
             cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
           }));
           setIzlenmeler(localIzlenmeler);
+          setDevamPuansizCevaplar(deg.puansizCevaplar);
+          setDevamIzlenmeTarihi(deg.izlenmeTarihi ? deg.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
           setDegId(devamId);
           setAdim("tablo");
 
@@ -215,31 +224,58 @@ function YeniDegerlendirmeIcerik() {
           }
           setBolumlar(detaylar);
 
-          // Firestore'da açık raporu hemen oluştur
-          const bolumSnap: Record<string, BolumSnapshot> = {};
-          detaylar.forEach(b => { bolumSnap[b.id] = { ad: b.ad, soruIdleri: b.soruIdleri }; });
-          const soruSnapObj: Record<string, SoruSnapshot> = {};
-          detaylar.flatMap(bd => bd.sorular).forEach(q => {
-            soruSnapObj[q.id] = { metin: q.metin, puan: q.puan, hedefYuzde: q.hedefYuzde };
-          });
+          // Bu personel/mağaza/ay için bu formda zaten açık bir rapor var mı? —
+          // varsa yeni bir tane daha açmak yerine onu devam ettir (yinelenen açık rapor engellenir).
+          const mevcutAcikRapor = (
+            await getAcikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
+          ).find(d => d.formId === paramFormId);
 
-          const personelObj = p.find(x => x.id === paramPersonelId);
-          const magazaObj = m.find(x => x.id === paramMagazaId);
+          if (mevcutAcikRapor) {
+            const localIzlenmeler: IzlenmeLocal[] = (mevcutAcikRapor.izlenmeler || []).map(iz => ({
+              id: iz.id,
+              tarih: iz.tarih.toDate(),
+              cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+            }));
+            setIzlenmeler(localIzlenmeler);
+            setDevamPuansizCevaplar(mevcutAcikRapor.puansizCevaplar);
+            setDevamIzlenmeTarihi(mevcutAcikRapor.izlenmeTarihi ? mevcutAcikRapor.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
+            setDegId(mevcutAcikRapor.id);
+          } else {
+            const anahtar = `${paramMagazaId}|${paramPersonelId}|${paramFormId}`;
+            if (olusturulanAnahtarRef.current !== anahtar) {
+              olusturulanAnahtarRef.current = anahtar;
 
-          const newId = await createDegerlendirme({
-            formId: form.id, formAd: form.ad,
-            personelId: paramPersonelId, personelAd: personelObj?.ad ?? "",
-            magazaId: paramMagazaId, magazaAd: magazaObj?.ad ?? "",
-            kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
-            ay: now.getMonth(), yil: now.getFullYear(),
-            puanli: form.puanli, skorlamaSistemi: form.skorlamaSistemi,
-            izlenmeler: [], toplamPuan: null, maxPuan: null,
-            bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
-            durum: "acik",
-          });
+              // Açık raporu (puanlı: aylık matris / puansız: tek form) hemen oluştur —
+              // böylece yarıda bırakılırsa "devam eden rapor" olarak tabloda görünür.
+              const bolumSnap: Record<string, BolumSnapshot> = {};
+              detaylar.forEach(b => { bolumSnap[b.id] = { ad: b.ad, soruIdleri: b.soruIdleri }; });
+              const soruSnapObj: Record<string, SoruSnapshot> = {};
+              detaylar.flatMap(bd => bd.sorular).forEach(q => {
+                soruSnapObj[q.id] = { metin: q.metin, puan: q.puan, hedefYuzde: q.hedefYuzde, tip: q.tip };
+              });
 
-          setIzlenmeler([]);
-          setDegId(newId);
+              const personelObj = p.find(x => x.id === paramPersonelId);
+              const magazaObj = m.find(x => x.id === paramMagazaId);
+
+              const newId = await createDegerlendirme({
+                formId: form.id, formAd: form.ad,
+                personelId: paramPersonelId, personelAd: personelObj?.ad ?? "",
+                magazaId: paramMagazaId, magazaAd: magazaObj?.ad ?? "",
+                kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
+                ay: now.getMonth(), yil: now.getFullYear(),
+                puanli: form.puanli, skorlamaSistemi: form.skorlamaSistemi,
+                izlenmeler: [], toplamPuan: null, maxPuan: null,
+                bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
+                cevaplar: {}, puansizCevaplar: {},
+                durum: "acik",
+                izlenmeTarihi: Timestamp.now(),
+              });
+
+              setIzlenmeler([]);
+              setDegId(newId);
+            }
+          }
+
           setBaslaniyor(false);
           setAdim("tablo");
 
@@ -288,8 +324,54 @@ function YeniDegerlendirmeIcerik() {
       detaylar.push({ ...b, sorular });
     }
     setBolumlar(detaylar);
-
     setIzlenmeler([]);
+
+    // Bu personel/mağaza/ay için bu formda zaten açık bir rapor var mı? —
+    // varsa yeni bir tane daha açmak yerine onu devam ettir.
+    const mevcutAcikRapor = (
+      await getAcikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
+    ).find(d => d.formId === seciliFormId);
+
+    if (mevcutAcikRapor) {
+      const localIzlenmeler: IzlenmeLocal[] = (mevcutAcikRapor.izlenmeler || []).map(iz => ({
+        id: iz.id,
+        tarih: iz.tarih.toDate(),
+        cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+      }));
+      setIzlenmeler(localIzlenmeler);
+      setDevamPuansizCevaplar(mevcutAcikRapor.puansizCevaplar);
+      setDevamIzlenmeTarihi(mevcutAcikRapor.izlenmeTarihi ? mevcutAcikRapor.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
+      setDegId(mevcutAcikRapor.id);
+    } else {
+      // Açık raporu (puanlı: aylık matris / puansız: tek form) hemen oluştur —
+      // böylece yarıda bırakılırsa "devam eden rapor" olarak tabloda görünür.
+      const bolumSnap: Record<string, BolumSnapshot> = {};
+      detaylar.forEach(b => { bolumSnap[b.id] = { ad: b.ad, soruIdleri: b.soruIdleri }; });
+      const soruSnapObj: Record<string, SoruSnapshot> = {};
+      detaylar.flatMap(bd => bd.sorular).forEach(q => {
+        soruSnapObj[q.id] = { metin: q.metin, puan: q.puan, hedefYuzde: q.hedefYuzde, tip: q.tip };
+      });
+
+      const personelObj = personeller.find(p => p.id === seciliPerId);
+      const magazaObj = magazalar.find(m => m.id === seciliMagId);
+
+      const newId = await createDegerlendirme({
+        formId: form.id, formAd: form.ad,
+        personelId: seciliPerId, personelAd: personelObj?.ad ?? "",
+        magazaId: seciliMagId, magazaAd: magazaObj?.ad ?? "",
+        kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
+        ay: seciliAy, yil: seciliYil,
+        puanli: form.puanli, skorlamaSistemi: form.skorlamaSistemi,
+        izlenmeler: [], toplamPuan: null, maxPuan: null,
+        bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
+        cevaplar: {}, puansizCevaplar: {},
+        durum: "acik",
+        izlenmeTarihi: Timestamp.now(),
+      });
+
+      setDegId(newId);
+    }
+
     setAdim("tablo");
     setBaslaniyor(false);
   }
@@ -329,7 +411,7 @@ function YeniDegerlendirmeIcerik() {
   const soruSnap = useMemo<Record<string, SoruSnapshot>>(() => {
     const s: Record<string, SoruSnapshot> = {};
     bolumDetaylar.flatMap(b => b.sorular).forEach(q => {
-      s[q.id] = { metin: q.metin, puan: q.puan, hedefYuzde: q.hedefYuzde };
+      s[q.id] = { metin: q.metin, puan: q.puan, hedefYuzde: q.hedefYuzde, tip: q.tip };
     });
     return s;
   }, [bolumDetaylar]);
@@ -413,6 +495,7 @@ function YeniDegerlendirmeIcerik() {
         izlenmeler: izlenmelerFS, toplamPuan, maxPuan,
         bolumSnapshot, soruSnapshot: soruSnap,
         durum: "kapali",
+        izlenmeTarihi: Timestamp.now(),
       });
       router.push(`/degerlendirmeler/${id}`);
     }
@@ -520,6 +603,24 @@ function YeniDegerlendirmeIcerik() {
       </div>
     </div>
   );
+
+  /* ════════ PUANSIZ — TEK SEFERLİK FORM ════════════════════════════════════════ */
+  if (seciliForm && seciliForm.puanli === false && personel && magaza) {
+    return (
+      <PuansizDegerlendirmeFormu
+        form={seciliForm}
+        bolumDetaylar={bolumDetaylar}
+        personel={personel}
+        magaza={magaza}
+        kameramanId={user!.uid}
+        kameramanAd={kullanici?.displayName ?? user!.displayName ?? ""}
+        mevcutId={degId ?? undefined}
+        mevcutPuansizCevaplar={devamPuansizCevaplar}
+        mevcutIzlenmeTarihi={devamIzlenmeTarihi}
+        onGeri={() => router.back()}
+      />
+    );
+  }
 
   /* ════════ ADIM 2 — MATRİS ════════════════════════════════════════════════════ */
   const puanYuzdesi = puan && puan.maxPuan > 0 ? Math.round((puan.toplamPuan / puan.maxPuan) * 100) : 0;

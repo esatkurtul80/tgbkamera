@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import {
   Search, ChevronUp, ChevronDown, ChevronsUpDown,
   ChevronLeft, ChevronRight,
@@ -12,7 +12,7 @@ type SortDir = "asc" | "desc" | null;
 
 export interface DataColumn<T> {
   key: string;
-  header: string;
+  header: ReactNode;
   cell: (row: T) => React.ReactNode;
   sortValue?: (row: T) => string | number;
   searchValue?: (row: T) => string;

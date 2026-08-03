@@ -2,6 +2,13 @@ import { Timestamp } from "firebase/firestore";
 
 export type CevapSecenegi = "evet" | "hayir" | "muaf";
 export type SkorlamaSistemi = "esik" | "oran";
+export type SoruTipi =
+  | "evet_hayir_muaf"
+  | "sayi"
+  | "tarih"
+  | "saat"
+  | "kisa_metin"
+  | "yorum";
 export type KullaniciRol =
   | "admin"
   | "sirketsahibi"
@@ -60,6 +67,7 @@ export interface Soru {
   metin: string;
   puan: number;
   hedefYuzde?: number;
+  tip?: SoruTipi;
   olusturmaTarihi: Timestamp;
   guncellemeTarihi: Timestamp;
 }
@@ -103,6 +111,17 @@ export interface SoruSnapshot {
   metin: string;
   puan: number;
   hedefYuzde?: number;
+  tip?: SoruTipi;
+}
+
+export interface PuansizCevapDegeri {
+  evetHayirMuaf?: CevapSecenegi;
+  sayi?: number;
+  tarih?: string;
+  saat?: string;
+  kisaMetin?: string;
+  yorum?: string;
+  fotograflar?: string[];
 }
 
 /** Tek bir izlenme anı: tarih/saat + o ana ait tüm cevaplar */
@@ -150,5 +169,8 @@ export interface Degerlendirme {
   /** @deprecated Eski tek-tarih formatı */
   izlenmeTarihi?: Timestamp;
   raporlamaTarihi?: Timestamp;
+
+  /** Puansız formlar için soru başına tip'e göre cevap — sadece puanli false iken kullanılır */
+  puansizCevaplar?: Record<string, PuansizCevapDegeri>;
 }
 

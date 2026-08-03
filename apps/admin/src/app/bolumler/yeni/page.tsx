@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import SoruSecimListesi from "@/components/degerlendirme/SoruSecimListesi";
 import { createBolum, getSorular } from "@/lib/firestore";
 import type { Soru } from "@/types";
 
@@ -28,8 +28,13 @@ export default function YeniBolumPage() {
     e.preventDefault();
     if (!ad.trim()) { setError("Bölüm adı boş bırakılamaz."); return; }
     setSaving(true);
-    await createBolum({ ad: ad.trim(), aciklama: aciklama.trim(), soruIdleri: seciliIds });
-    router.push("/bolumler");
+    try {
+      await createBolum({ ad: ad.trim(), aciklama: aciklama.trim(), soruIdleri: seciliIds });
+      router.push("/bolumler");
+    } catch (err) {
+      setError((err as Error).message);
+      setSaving(false);
+    }
   }
 
   return (
@@ -68,29 +73,7 @@ export default function YeniBolumPage() {
 
         <div className="bg-white rounded-2xl border border-slate-100 p-6">
           <h2 className="text-sm font-semibold text-slate-800 mb-4">Soru Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></h2>
-          {sorular.length === 0 ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Henüz soru yok. Önce soru oluşturun.</p>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {sorular.map((soru) => {
-                const secili = seciliIds.includes(soru.id);
-                return (
-                  <button
-                    key={soru.id}
-                    type="button"
-                    onClick={() => toggleSoru(soru.id)}
-                    className={`flex items-center gap-3 w-full py-3 text-left transition-colors ${secili ? "text-indigo-700" : "text-slate-700"}`}
-                  >
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${secili ? "bg-indigo-600 border-indigo-600" : "border-slate-300"}`}>
-                      {secili && <Check size={12} className="text-white" />}
-                    </div>
-                    <span className="flex-1 text-sm">{soru.metin}</span>
-                    <span className="text-xs font-semibold text-slate-400 shrink-0">{soru.puan} puan</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <SoruSecimListesi sorular={sorular} seciliIds={seciliIds} onToggle={toggleSoru} boxed={false} />
         </div>
 
         <div className="flex items-center gap-3">

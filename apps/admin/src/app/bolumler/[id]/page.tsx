@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
+import Badge from "@/components/ui/Badge";
 import { getBolum, getSorular } from "@/lib/firestore";
 import type { Bolum, Soru } from "@/types";
 
@@ -71,7 +72,7 @@ export default function BolumDetayPage() {
                     {i + 1}
                   </span>
                   <p className="flex-1 text-sm text-slate-700">{soru?.metin ?? <span className="text-slate-400 italic">Soru bulunamadı</span>}</p>
-                  {soru && <span className="text-xs font-semibold text-indigo-600 shrink-0">{soru.puan} puan</span>}
+                  {soru && (soru.tip ? <Badge variant={soru.tip} /> : <span className="text-xs font-semibold text-indigo-600 shrink-0">{soru.puan} puan</span>)}
                 </div>
               );
             })}
