@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, TrendingUp, CalendarDays, CheckCircle2, Store, Search, Users, UserPlus, UserMinus, Play, ArrowRight, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDegerlendirmeler, getMagazalar, getAktifPersoneller, getPersonellerByMagaza, updatePersonel, getFormlar, getAcikDegerlendirmeler } from "@/lib/firestore";
+import { getDegerlendirmeler, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler } from "@/lib/firestore";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import type { Degerlendirme, Magaza, Personel, Form } from "@/types";
@@ -64,10 +64,12 @@ export default function KameramanPaneliPage() {
 
   async function refreshPersonnelForMagaza(magazaId: string) {
     try {
-      const pList = await getPersonellerByMagaza(magazaId);
-      setPersonellerMap((prev) => ({ ...prev, [magazaId]: pList }));
       const activeP = await getAktifPersoneller();
       setTumAktifPersoneller(activeP);
+      setPersonellerMap((prev) => ({
+        ...prev,
+        [magazaId]: activeP.filter((p) => p.magazaIdleri?.includes(magazaId)),
+      }));
     } catch (err) {
       console.error("Error refreshing personnel for store:", err);
     }
@@ -93,10 +95,12 @@ export default function KameramanPaneliPage() {
         const benimM = allM.filter((m) => authMagazaIdleri.includes(m.id));
         setMagazalar(benimM);
 
+        // Mağaza başına ayrı sorgu atmak yerine (132 mağazada ~21sn'ye kadar
+        // sürüyordu), tek seferde çekilen aktif personel listesi mağazalara göre
+        // istemci tarafında gruplanır — tek sorgu, anlık render.
         const map: Record<string, Personel[]> = {};
         for (const m of benimM) {
-          const pList = await getPersonellerByMagaza(m.id);
-          map[m.id] = pList;
+          map[m.id] = activeP.filter((p) => p.magazaIdleri?.includes(m.id));
         }
         setPersonellerMap(map);
 
