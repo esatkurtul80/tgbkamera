@@ -1,13 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Pencil, Plus, Store, Check, Search } from "lucide-react";
+import { Users, Pencil, Plus, Store, Check, Search, Upload, FileSpreadsheet } from "lucide-react";
+import { Workbook, type Cell } from "exceljs";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import { getPersoneller, createPersonel, getPersonel, updatePersonel, getMagazalar } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Personel, Magaza } from "@/types";
+
+interface TopluSatir {
+  rowNo: number;
+  magazaAdiRaw: string;
+  ad: string;
+  tc: string;
+  magazaId: string | null;
+}
+
+function hucreMetni(cell: Cell | undefined): string {
+  if (!cell) return "";
+  const v = cell.value;
+  if (v == null) return "";
+  if (typeof v === "object") {
+    if (v instanceof Date) return v.toLocaleDateString("tr-TR");
+    if ("richText" in v && Array.isArray((v as { richText?: { text: string }[] }).richText)) {
+      return (v as { richText: { text: string }[] }).richText.map((t) => t.text).join("").trim();
+    }
+    if ("text" in v) return String((v as { text: unknown }).text ?? "").trim();
+    if ("result" in v) return String((v as { result: unknown }).result ?? "").trim();
+    return "";
+  }
+  return String(v).trim();
+}
+
+function normalizeMagazaAdi(s: string): string {
+  return s.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
+}
 
 export default function PersonelPage() {
   const { kullanici } = useAuth();
@@ -35,6 +64,15 @@ export default function PersonelPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // Toplu Personel Ekle
+  const [topluAcik, setTopluAcik] = useState(false);
+  const [topluParsing, setTopluParsing] = useState(false);
+  const [topluSatirlar, setTopluSatirlar] = useState<TopluSatir[]>([]);
+  const [topluDuzeltmeler, setTopluDuzeltmeler] = useState<Record<number, string>>({});
+  const [topluHata, setTopluHata] = useState("");
+  const [topluImporting, setTopluImporting] = useState(false);
+  const [topluSonuc, setTopluSonuc] = useState<{ eklenen: number; guncellenen: number; atlanan: number } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -79,6 +117,113 @@ export default function PersonelPage() {
     await updatePersonel(editId, { ad: editAd.trim(), tc: editTc.trim(), magazaIdleri: editMagazaIds, aktif: editAktif });
     setEditSaving(false); setEditId(null); load();
   }
+
+  function openToplu() {
+    setTopluAcik(true);
+    setTopluSatirlar([]);
+    setTopluDuzeltmeler({});
+    setTopluHata("");
+    setTopluSonuc(null);
+  }
+
+  async function handleTopluDosya(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setTopluHata("");
+    setTopluSonuc(null);
+    setTopluParsing(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = new Workbook();
+      await wb.xlsx.load(buffer);
+      const ws = wb.worksheets[0];
+      if (!ws) throw new Error("Çalışma sayfası bulunamadı.");
+
+      const satirlar: TopluSatir[] = [];
+      ws.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // başlık satırı atlanır
+        const magazaAdiRaw = hucreMetni(row.getCell(1));
+        const ad = hucreMetni(row.getCell(2));
+        const tc = hucreMetni(row.getCell(3)).replace(/[^0-9]/g, "");
+        if (!magazaAdiRaw && !ad && !tc) return; // boş satır
+        const magazaId =
+          magazalar.find((m) => normalizeMagazaAdi(m.ad) === normalizeMagazaAdi(magazaAdiRaw))?.id ?? null;
+        satirlar.push({ rowNo: rowNumber, magazaAdiRaw, ad, tc, magazaId });
+      });
+
+      if (satirlar.length === 0) throw new Error("Excel dosyasında okunacak satır bulunamadı.");
+      setTopluSatirlar(satirlar);
+      setTopluDuzeltmeler({});
+    } catch (err) {
+      console.error("Excel okuma hatası:", err);
+      setTopluHata("Dosya okunamadı. Lütfen A: Mağaza Adı, B: Ad Soyad, C: TC Kimlik No sütunlarını içeren geçerli bir .xlsx dosyası seçin.");
+    } finally {
+      setTopluParsing(false);
+    }
+  }
+
+  async function handleTopluIceAktar() {
+    setTopluImporting(true);
+    setTopluHata("");
+    try {
+      const cozulmusSatirlar = topluSatirlar
+        .map((s) => {
+          if (s.magazaId) return s;
+          const duzeltme = topluDuzeltmeler[s.rowNo];
+          if (!duzeltme || duzeltme === "atla") return null;
+          return { ...s, magazaId: duzeltme };
+        })
+        .filter((s): s is TopluSatir => !!s && !!s.ad.trim());
+      const atlanan = topluSatirlar.length - cozulmusSatirlar.length;
+
+      // Aynı kişi birden fazla satırda (farklı mağazalarda) geçiyorsa TC'ye göre
+      // tek personelde birleştirilir; TC boşsa satır kendi başına içe aktarılır.
+      const gruplar = new Map<string, { ad: string; tc: string; magazaIds: Set<string> }>();
+      let sirNo = 0;
+      for (const s of cozulmusSatirlar) {
+        const key = s.tc ? `tc:${s.tc}` : `satir:${sirNo++}`;
+        const mevcut = gruplar.get(key);
+        if (mevcut) {
+          mevcut.magazaIds.add(s.magazaId!);
+        } else {
+          gruplar.set(key, { ad: s.ad.trim(), tc: s.tc, magazaIds: new Set([s.magazaId!]) });
+        }
+      }
+
+      let eklenen = 0;
+      let guncellenen = 0;
+      for (const grup of gruplar.values()) {
+        const mevcutPersonel = grup.tc ? personeller.find((p) => p.tc === grup.tc) : undefined;
+        if (mevcutPersonel) {
+          const birlesikIds = Array.from(new Set([...(mevcutPersonel.magazaIdleri ?? []), ...grup.magazaIds]));
+          await updatePersonel(mevcutPersonel.id, {
+            ad: mevcutPersonel.ad,
+            tc: mevcutPersonel.tc,
+            magazaIdleri: birlesikIds,
+            aktif: mevcutPersonel.aktif,
+          });
+          guncellenen++;
+        } else {
+          await createPersonel({ ad: grup.ad, tc: grup.tc, magazaIdleri: Array.from(grup.magazaIds) });
+          eklenen++;
+        }
+      }
+
+      setTopluSonuc({ eklenen, guncellenen, atlanan });
+      setTopluSatirlar([]);
+      setTopluDuzeltmeler({});
+      await load();
+    } catch (err) {
+      console.error("Toplu içe aktarma hatası:", err);
+      setTopluHata("İçe aktarma sırasında bir hata oluştu. Lütfen tekrar deneyin.");
+    } finally {
+      setTopluImporting(false);
+    }
+  }
+
+  const topluCakisanlar = topluSatirlar.filter((s) => !s.magazaId);
+  const topluEslesenler = topluSatirlar.filter((s) => s.magazaId);
 
   function MagazaCheckList({ seciliIds, onToggle, araVal, onAraChange }: {
     seciliIds: string[]; onToggle: (id: string) => void; araVal: string; onAraChange: (v: string) => void;
@@ -195,9 +340,14 @@ export default function PersonelPage() {
           </p>
         </div>
         {!isKameraman && (
-          <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-            <Plus size={15} /> Yeni Personel
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={openToplu} className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-slate-700 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+              <Upload size={15} /> Toplu Personel Ekle
+            </button>
+            <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+              <Plus size={15} /> Yeni Personel
+            </button>
+          </div>
         )}
       </div>
 
@@ -274,6 +424,113 @@ export default function PersonelPage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Toplu Personel Ekle Modal */}
+      <Modal open={topluAcik} onClose={() => setTopluAcik(false)} title="Toplu Personel Ekle" size="lg">
+        <div className="space-y-5">
+          {topluSonuc ? (
+            <div className="space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl p-4 text-sm">
+                <p className="font-semibold">İçe aktarma tamamlandı.</p>
+                <p className="mt-1">
+                  {topluSonuc.eklenen} yeni personel eklendi, {topluSonuc.guncellenen} mevcut personele yeni mağaza eklendi
+                  {topluSonuc.atlanan > 0 && `, ${topluSonuc.atlanan} satır atlandı`}.
+                </p>
+              </div>
+              <button type="button" onClick={() => setTopluAcik(false)} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                Tamam
+              </button>
+            </div>
+          ) : topluSatirlar.length === 0 ? (
+            <div className="space-y-4">
+              <div className="text-sm text-slate-600 space-y-1.5">
+                <p>
+                  Excel sütun sırası: <span className="font-semibold text-slate-800">A: Mağaza Adı</span>,{" "}
+                  <span className="font-semibold text-slate-800">B: Ad Soyad</span>,{" "}
+                  <span className="font-semibold text-slate-800">C: TC Kimlik No</span>.
+                </p>
+                <p className="text-slate-400">İlk satır başlık kabul edilir ve atlanır.</p>
+              </div>
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 rounded-xl py-10 cursor-pointer transition-colors">
+                <FileSpreadsheet size={28} className="text-slate-400" />
+                <span className="text-sm font-medium text-slate-600">{topluParsing ? "Okunuyor..." : "Excel dosyası seç (.xlsx)"}</span>
+                <input type="file" accept=".xlsx" className="hidden" disabled={topluParsing} onChange={handleTopluDosya} />
+              </label>
+              {topluHata && <p className="text-sm text-red-500">{topluHata}</p>}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
+                <p className="text-slate-600">
+                  <span className="font-semibold text-slate-800">{topluSatirlar.length}</span> satır okundu ·{" "}
+                  <span className="font-semibold text-emerald-600">{topluEslesenler.length}</span> eşleşti
+                  {topluCakisanlar.length > 0 && (
+                    <>
+                      {" "}
+                      · <span className="font-semibold text-amber-600">{topluCakisanlar.length}</span> mağaza adı eşleşmedi
+                    </>
+                  )}
+                </p>
+                <button type="button" onClick={() => { setTopluSatirlar([]); setTopluDuzeltmeler({}); }} className="text-xs font-medium text-slate-400 hover:text-slate-600">
+                  Farklı dosya seç
+                </button>
+              </div>
+
+              {topluCakisanlar.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-amber-700">Eşleşmeyen mağaza adları — doğru mağazayı seçin ya da atlayın</p>
+                  <div className="border border-amber-200 rounded-xl overflow-hidden divide-y divide-amber-100 max-h-64 overflow-y-auto">
+                    {topluCakisanlar.map((s) => (
+                      <div key={s.rowNo} className="p-3 bg-amber-50/40 space-y-2">
+                        <div className="text-sm">
+                          <span className="font-semibold text-slate-800">{s.ad || "(isimsiz)"}</span>
+                          <span className="text-slate-400"> · satır {s.rowNo}</span>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Excel&apos;deki mağaza adı:{" "}
+                          <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">{s.magazaAdiRaw || "(boş)"}</span>
+                        </div>
+                        <select
+                          value={topluDuzeltmeler[s.rowNo] ?? ""}
+                          onChange={(e) => setTopluDuzeltmeler((p) => ({ ...p, [s.rowNo]: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">— Mağaza seçin —</option>
+                          <option value="atla">Atla (içe aktarma)</option>
+                          {magazalar.map((m) => (
+                            <option key={m.id} value={m.id}>{m.ad}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {topluHata && <p className="text-sm text-red-500">{topluHata}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleTopluIceAktar}
+                  disabled={topluImporting}
+                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+                >
+                  {topluImporting ? "İçe aktarılıyor..." : "İçe Aktar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTopluAcik(false)}
+                  disabled={topluImporting}
+                  className="px-5 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
