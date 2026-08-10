@@ -7,7 +7,8 @@ import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import { getSorular, deleteSoru, createSoru, getSoru, updateSoru } from "@/lib/firestore";
-import type { Soru, SoruTipi } from "@/types";
+import { soruSinifi } from "@/lib/homojenlik";
+import type { Soru, SoruTipi, SoruKategori } from "@/types";
 
 const SORU_TIPI_SECENEKLER: { value: SoruTipi; label: string; aciklama: string }[] = [
   { value: "evet_hayir_muaf", label: "Evet/Hayır/Muaf", aciklama: "Üç seçenekli klasik cevap." },
@@ -18,16 +19,22 @@ const SORU_TIPI_SECENEKLER: { value: SoruTipi; label: string; aciklama: string }
   { value: "yorum", label: "Yorum", aciklama: "Uzun serbest metin." },
 ];
 
+const KATEGORI_SECENEKLER: { value: SoruKategori; label: string }[] = [
+  { value: "puanli", label: "Puanlı" },
+  { value: "puansiz", label: "Puansız" },
+  { value: "yorumlu_puanli", label: "Yorumlu Puanlı" },
+];
+
 export default function SorularPage() {
   const [sorular, setSorular] = useState<Soru[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [aktifTab, setAktifTab] = useState<"puanli" | "puansiz">("puanli");
+  const [aktifTab, setAktifTab] = useState<SoruKategori>("puanli");
 
   const [yeniAcik, setYeniAcik] = useState(false);
   const [yeniMetin, setYeniMetin] = useState("");
-  const [yeniPuanli, setYeniPuanli] = useState(true);
+  const [yeniKategori, setYeniKategori] = useState<SoruKategori>("puanli");
   const [yeniPuan, setYeniPuan] = useState(0);
   const [yeniHedefYuzde, setYeniHedefYuzde] = useState<number | "">("");
   const [yeniTip, setYeniTip] = useState<SoruTipi>("evet_hayir_muaf");
@@ -36,7 +43,7 @@ export default function SorularPage() {
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editMetin, setEditMetin] = useState("");
-  const [editPuanli, setEditPuanli] = useState(true);
+  const [editKategori, setEditKategori] = useState<SoruKategori>("puanli");
   const [editPuan, setEditPuan] = useState(0);
   const [editHedefYuzde, setEditHedefYuzde] = useState<number | "">("");
   const [editTip, setEditTip] = useState<SoruTipi>("evet_hayir_muaf");
@@ -52,7 +59,7 @@ export default function SorularPage() {
   useEffect(() => { load(); }, []);
 
   function openYeni() {
-    setYeniMetin(""); setYeniPuanli(aktifTab === "puanli"); setYeniPuan(0); setYeniHedefYuzde("");
+    setYeniMetin(""); setYeniKategori(aktifTab); setYeniPuan(0); setYeniHedefYuzde("");
     setYeniTip("evet_hayir_muaf"); setYeniError("");
     setYeniAcik(true);
   }
@@ -60,12 +67,14 @@ export default function SorularPage() {
   async function handleYeniSave(e: React.FormEvent) {
     e.preventDefault();
     if (!yeniMetin.trim()) { setYeniError("Soru metni boş bırakılamaz."); return; }
+    const puanli = yeniKategori === "puanli";
     setYeniSaving(true);
     await createSoru({
       metin: yeniMetin.trim(),
-      puan: yeniPuanli ? yeniPuan : 0,
-      hedefYuzde: yeniPuanli && yeniHedefYuzde !== "" ? yeniHedefYuzde : undefined,
-      tip: yeniPuanli ? undefined : yeniTip,
+      puan: puanli ? yeniPuan : 0,
+      hedefYuzde: puanli && yeniHedefYuzde !== "" ? yeniHedefYuzde : undefined,
+      tip: puanli ? undefined : yeniTip,
+      kategori: yeniKategori,
     });
     setYeniSaving(false); setYeniAcik(false); load();
   }
@@ -75,7 +84,7 @@ export default function SorularPage() {
     const s = await getSoru(id);
     if (s) {
       setEditMetin(s.metin); setEditPuan(s.puan); setEditHedefYuzde(s.hedefYuzde ?? "");
-      setEditPuanli(!s.tip); setEditTip(s.tip ?? "evet_hayir_muaf");
+      setEditKategori(soruSinifi(s)); setEditTip(s.tip ?? "evet_hayir_muaf");
     }
     setEditLoading(false);
   }
@@ -83,12 +92,14 @@ export default function SorularPage() {
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault();
     if (!editId || !editMetin.trim()) { setEditError("Soru metni boş bırakılamaz."); return; }
+    const puanli = editKategori === "puanli";
     setEditSaving(true);
     await updateSoru(editId, {
       metin: editMetin.trim(),
-      puan: editPuanli ? editPuan : 0,
-      hedefYuzde: editPuanli && editHedefYuzde !== "" ? editHedefYuzde : undefined,
-      tip: editPuanli ? undefined : editTip,
+      puan: puanli ? editPuan : 0,
+      hedefYuzde: puanli && editHedefYuzde !== "" ? editHedefYuzde : undefined,
+      tip: puanli ? undefined : editTip,
+      kategori: editKategori,
     });
     setEditSaving(false); setEditId(null); load();
   }
@@ -122,14 +133,14 @@ export default function SorularPage() {
     </div>
   );
 
-  const PuanliToggle = ({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) => (
+  const KategoriSecimi = ({ value, onChange }: { value: SoruKategori; onChange: (v: SoruKategori) => void }) => (
     <div>
       <p className="text-sm font-medium text-slate-700 mb-2">Soru Türü</p>
       <div className="flex gap-2">
-        {[true, false].map((val) => (
-          <button key={String(val)} type="button" onClick={() => onChange(val)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${value === val ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-            {value === val && <Check size={13} />}{val ? "Puanlı" : "Puansız"}
+        {KATEGORI_SECENEKLER.map((s) => (
+          <button key={s.value} type="button" onClick={() => onChange(s.value)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${value === s.value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+            {value === s.value && <Check size={13} />}{s.label}
           </button>
         ))}
       </div>
@@ -220,9 +231,11 @@ export default function SorularPage() {
           islemlerColumn,
         ];
 
-  const puanliSorular = sorular.filter((s) => !s.tip);
-  const puansizSorular = sorular.filter((s) => !!s.tip);
-  const gorunenSorular = aktifTab === "puanli" ? puanliSorular : puansizSorular;
+  const puanliSorular = sorular.filter((s) => soruSinifi(s) === "puanli");
+  const puansizSorular = sorular.filter((s) => soruSinifi(s) === "puansiz");
+  const yorumluPuanliSorular = sorular.filter((s) => soruSinifi(s) === "yorumlu_puanli");
+  const gorunenSorular =
+    aktifTab === "puanli" ? puanliSorular : aktifTab === "puansiz" ? puansizSorular : yorumluPuanliSorular;
 
   return (
     <div className="flex flex-col gap-5">
@@ -240,6 +253,7 @@ export default function SorularPage() {
         {([
           { key: "puanli" as const, label: "Puanlı", count: puanliSorular.length },
           { key: "puansiz" as const, label: "Puansız", count: puansizSorular.length },
+          { key: "yorumlu_puanli" as const, label: "Yorumlu Puanlı", count: yorumluPuanliSorular.length },
         ]).map((t) => (
           <button key={t.key} type="button" onClick={() => setAktifTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aktifTab === t.key ? "bg-indigo-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
@@ -255,7 +269,9 @@ export default function SorularPage() {
         loading={loading}
         searchPlaceholder="Soru ara..."
         emptyIcon={HelpCircle}
-        emptyTitle={aktifTab === "puanli" ? "Henüz puanlı soru yok" : "Henüz puansız soru yok"}
+        emptyTitle={
+          aktifTab === "puanli" ? "Henüz puanlı soru yok" : aktifTab === "puansiz" ? "Henüz puansız soru yok" : "Henüz yorumlu puanlı soru yok"
+        }
         emptyDescription="Yeni soru eklemek için sağ üstteki butona tıklayın."
       />
 
@@ -268,8 +284,8 @@ export default function SorularPage() {
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
             {yeniError && <p className="text-xs text-red-500 mt-1">{yeniError}</p>}
           </div>
-          <PuanliToggle value={yeniPuanli} onChange={setYeniPuanli} />
-          {yeniPuanli ? (
+          <KategoriSecimi value={yeniKategori} onChange={setYeniKategori} />
+          {yeniKategori === "puanli" ? (
             <>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Puan</label>
@@ -300,8 +316,8 @@ export default function SorularPage() {
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
               {editError && <p className="text-xs text-red-500 mt-1">{editError}</p>}
             </div>
-            <PuanliToggle value={editPuanli} onChange={setEditPuanli} />
-            {editPuanli ? (
+            <KategoriSecimi value={editKategori} onChange={setEditKategori} />
+            {editKategori === "puanli" ? (
               <>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">Puan</label>

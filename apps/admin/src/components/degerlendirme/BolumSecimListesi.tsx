@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, Check, AlertTriangle } from "lucide-react";
-import { bolumSinifi, bolumKarisikMi } from "@/lib/homojenlik";
+import { bolumSinifi, bolumKarisikMi, soruSinifiEtiketi, type SoruSinifi } from "@/lib/homojenlik";
 import type { Bolum, Soru } from "@/types";
 
 interface BolumSecimListesiProps {
@@ -11,8 +11,8 @@ interface BolumSecimListesiProps {
   sorularById: Record<string, Soru>;
   seciliIds: string[];
   onToggle: (id: string) => void;
-  /** Formun Puan Tipi seçimi — bölüm bununla uyuşmuyorsa devre dışı bırakılır. */
-  formPuanli: boolean;
+  /** Formun gerektirdiği soru sınıfı (bkz. lib/homojenlik formGerekliSinif) — bölüm bununla uyuşmuyorsa devre dışı bırakılır. */
+  formGerekliSinif: SoruSinifi;
   araVal?: string;
   onAraChange?: (v: string) => void;
   boxed?: boolean;
@@ -23,7 +23,7 @@ export default function BolumSecimListesi({
   sorularById,
   seciliIds,
   onToggle,
-  formPuanli,
+  formGerekliSinif,
   araVal,
   onAraChange,
   boxed = true,
@@ -38,11 +38,11 @@ export default function BolumSecimListesi({
         const secili = seciliIds.includes(bolum.id);
         const sinif = bolumSinifi(bolum.soruIdleri, sorularById);
         const karisik = bolumKarisikMi(bolum.soruIdleri, sorularById);
-        const uyumsuz = !secili && (karisik || (sinif !== null && (sinif === "puanli") !== formPuanli));
+        const uyumsuz = !secili && (karisik || (sinif !== null && sinif !== formGerekliSinif));
         const uyariMetni = karisik
-          ? "Bu bölümde hem puanlı hem puansız sorular karışık — önce bölümü düzenleyin."
+          ? "Bu bölümde farklı türde sorular karışık — önce bölümü düzenleyin."
           : uyumsuz
-          ? `Bu bölüm ${sinif === "puanli" ? "puanlı" : "puansız"} sorulardan oluşuyor, form tipiyle uyuşmuyor.`
+          ? `Bu bölüm ${sinif ? soruSinifiEtiketi(sinif) : ""} sorulardan oluşuyor, form tipiyle uyuşmuyor.`
           : undefined;
         return (
           <button

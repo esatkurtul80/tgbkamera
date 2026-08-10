@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateCustomId } from "@/lib/idUtils";
-import { bolumKarisikMi, bolumFormaUygunMu } from "@/lib/homojenlik";
+import { bolumKarisikMi, bolumFormaUygunMu, bolumSinifi, formGerekliSinif, soruSinifiEtiketi } from "@/lib/homojenlik";
 import type {
   Soru,
   Bolum,
@@ -31,6 +31,7 @@ import type {
   KullaniciRol,
   SkorlamaSistemi,
   SoruTipi,
+  SoruKategori,
 } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -215,6 +216,7 @@ export async function createSoru(data: {
   puan: number;
   hedefYuzde?: number;
   tip?: SoruTipi;
+  kategori?: SoruKategori;
 }): Promise<string> {
   const customId = generateCustomId(data.metin);
   await setDoc(doc(db, "sorular", customId), {
@@ -227,7 +229,7 @@ export async function createSoru(data: {
 
 export async function updateSoru(
   id: string,
-  data: { metin: string; puan: number; hedefYuzde?: number; tip?: SoruTipi }
+  data: { metin: string; puan: number; hedefYuzde?: number; tip?: SoruTipi; kategori?: SoruKategori }
 ): Promise<void> {
   await updateDoc(doc(db, "sorular", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
@@ -306,7 +308,12 @@ export async function getForm(id: string): Promise<Form | null> {
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Form) : null;
 }
 
-async function bolumIdleriniDogrula(bolumIdleri: string[], puanli: boolean): Promise<void> {
+async function bolumIdleriniDogrula(
+  bolumIdleri: string[],
+  puanli: boolean,
+  puanGirisTipi?: "otomatik" | "manuel"
+): Promise<void> {
+  const gerekliSinif = formGerekliSinif(puanli, puanGirisTipi);
   for (const bolumId of bolumIdleri) {
     const bolum = await getBolum(bolumId);
     if (!bolum || bolum.soruIdleri.length === 0) continue;
@@ -314,10 +321,11 @@ async function bolumIdleriniDogrula(bolumIdleri: string[], puanli: boolean): Pro
     if (bolumKarisikMi(bolum.soruIdleri, sorularById)) {
       throw new Error(`"${bolum.ad}" bölümü karışık soru tiplerinden oluşuyor, forma atanamaz.`);
     }
-    if (!bolumFormaUygunMu(bolum.soruIdleri, sorularById, puanli)) {
-      throw new Error(
-        `"${bolum.ad}" bölümü ${puanli ? "puansız" : "puanlı"} sorulardan oluşuyor, ${puanli ? "puanlı" : "puansız"} forma atanamaz.`
-      );
+    if (!bolumFormaUygunMu(bolum.soruIdleri, sorularById, gerekliSinif)) {
+      const bolumSinif = bolumSinifi(bolum.soruIdleri, sorularById);
+      const bolumun = bolumSinif ? soruSinifiEtiketi(bolumSinif) : "";
+      const formun = soruSinifiEtiketi(gerekliSinif);
+      throw new Error(`"${bolum.ad}" bölümü ${bolumun} sorulardan oluşuyor, ${formun} forma atanamaz.`);
     }
   }
 }
@@ -326,10 +334,11 @@ export async function createForm(data: {
   ad: string;
   aciklama: string;
   puanli: boolean;
+  puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
   bolumIdleri: string[];
 }): Promise<string> {
-  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli);
+  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli, data.puanGirisTipi);
   const customId = generateCustomId(data.ad);
   await setDoc(doc(db, "formlar", customId), {
     ...cleanData(data),
@@ -345,11 +354,12 @@ export async function updateForm(
     ad: string;
     aciklama: string;
     puanli: boolean;
+    puanGirisTipi?: "otomatik" | "manuel";
     skorlamaSistemi?: SkorlamaSistemi;
     bolumIdleri: string[];
   }
 ): Promise<void> {
-  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli);
+  await bolumIdleriniDogrula(data.bolumIdleri, data.puanli, data.puanGirisTipi);
   await updateDoc(doc(db, "formlar", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
 
@@ -490,6 +500,7 @@ export async function updateDegerlendirme(
     durum?: import("@/types").DegerlendirmeDurum;
     toplamPuan?: number | null;
     maxPuan?: number | null;
+    puanGirisTipi?: import("@/types").Degerlendirme["puanGirisTipi"];
   }
 ): Promise<void> {
   await updateDoc(doc(db, "degerlendirmeler", id), {

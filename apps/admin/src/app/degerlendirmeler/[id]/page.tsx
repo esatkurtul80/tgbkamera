@@ -61,8 +61,11 @@ export default function DegerlendirmeRaporPage() {
 
   // Eski format desteği
   const isLegacy = !d.izlenmeler || d.izlenmeler.length === 0;
-  // Yeni tek-seferlik puansız format: puansizCevaplar alanı doldurulmuş (bug düzeltmesi sonrası oluşturulan kayıtlar)
-  const isPuansizNewFormat = d.puanli === false && d.puansizCevaplar !== undefined;
+  // Yeni tek-seferlik format (puansız veya yorumlu puanlı): puansizCevaplar alanı doldurulmuş.
+  // Not: matris/otomatik-puanlı raporlarda da puansizCevaplar taslak aşamasında {} olarak set edilir,
+  // bu yüzden tek başına yeterli değil — form gerçekten puansız-şekilli mi diye de bakılmalı.
+  const isPuansizNewFormat =
+    d.puansizCevaplar !== undefined && (d.puanli === false || d.puanGirisTipi === "manuel");
   const bolumSirasi = Object.keys(d.bolumSnapshot);
   const sistem = d.skorlamaSistemi ?? "oran";
 

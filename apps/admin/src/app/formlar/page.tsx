@@ -8,7 +8,10 @@ import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
 import { getFormlar, deleteForm, createForm, getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
+import { formGerekliSinif } from "@/lib/homojenlik";
 import type { Form, Bolum, Soru, SkorlamaSistemi } from "@/types";
+
+type PuanGirisTipi = "otomatik" | "manuel";
 
 const SKORLAMA_SECENEKLER: { value: SkorlamaSistemi; label: string; aciklama: string }[] = [
   {
@@ -35,6 +38,7 @@ export default function FormlarPage() {
   const [yeniAd, setYeniAd] = useState("");
   const [yeniAciklama, setYeniAciklama] = useState("");
   const [yeniPuanli, setYeniPuanli] = useState(true);
+  const [yeniPuanGirisTipi, setYeniPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [yeniSkorlamaSistemi, setYeniSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [yeniBolumler, setYeniBolumler] = useState<Bolum[]>([]);
   const [yeniSorularById, setYeniSorularById] = useState<Record<string, Soru>>({});
@@ -54,6 +58,7 @@ export default function FormlarPage() {
   const [editAd, setEditAd] = useState("");
   const [editAciklama, setEditAciklama] = useState("");
   const [editPuanli, setEditPuanli] = useState(true);
+  const [editPuanGirisTipi, setEditPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [editSkorlamaSistemi, setEditSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [editBolumler, setEditBolumler] = useState<Bolum[]>([]);
   const [editSorularById, setEditSorularById] = useState<Record<string, Soru>>({});
@@ -71,7 +76,7 @@ export default function FormlarPage() {
   useEffect(() => { load(); }, []);
 
   async function openYeni() {
-    setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniSkorlamaSistemi("esik");
+    setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniPuanGirisTipi("otomatik"); setYeniSkorlamaSistemi("esik");
     setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
     const [b, sorular] = await Promise.all([getBolumler(), getSorular()]);
     setYeniBolumler(b);
@@ -90,7 +95,8 @@ export default function FormlarPage() {
         ad: yeniAd.trim(),
         aciklama: yeniAciklama.trim(),
         puanli: yeniPuanli,
-        skorlamaSistemi: yeniPuanli ? yeniSkorlamaSistemi : undefined,
+        puanGirisTipi: yeniPuanli ? yeniPuanGirisTipi : undefined,
+        skorlamaSistemi: yeniPuanli && yeniPuanGirisTipi !== "manuel" ? yeniSkorlamaSistemi : undefined,
         bolumIdleri: yeniSeciliIds,
       });
       setYeniAcik(false);
@@ -123,6 +129,7 @@ export default function FormlarPage() {
     const [f, tumBolumler, sorular] = await Promise.all([getForm(id), getBolumler(), getSorular()]);
     if (f) {
       setEditAd(f.ad); setEditAciklama(f.aciklama); setEditPuanli(f.puanli);
+      setEditPuanGirisTipi(f.puanGirisTipi ?? "otomatik");
       setEditSkorlamaSistemi(f.skorlamaSistemi ?? "esik");
       setEditSeciliIds(f.bolumIdleri);
     }
@@ -142,7 +149,8 @@ export default function FormlarPage() {
         ad: editAd.trim(),
         aciklama: editAciklama.trim(),
         puanli: editPuanli,
-        skorlamaSistemi: editPuanli ? editSkorlamaSistemi : undefined,
+        puanGirisTipi: editPuanli ? editPuanGirisTipi : undefined,
+        skorlamaSistemi: editPuanli && editPuanGirisTipi !== "manuel" ? editSkorlamaSistemi : undefined,
         bolumIdleri: editSeciliIds,
       });
       setEditId(null);
@@ -167,6 +175,47 @@ export default function FormlarPage() {
     f.ad.toLowerCase().includes(ara.toLowerCase()) ||
     f.aciklama?.toLowerCase().includes(ara.toLowerCase())
   );
+
+  function formTipBadge(form: Pick<Form, "puanli" | "puanGirisTipi">) {
+    if (!form.puanli) return "puansiz";
+    return form.puanGirisTipi === "manuel" ? "yorumlu_puanli" : "puanli";
+  }
+
+  const PUAN_TIPI_SECENEKLER: { puanli: boolean; puanGirisTipi: PuanGirisTipi; label: string }[] = [
+    { puanli: true, puanGirisTipi: "otomatik", label: "Puanlı" },
+    { puanli: false, puanGirisTipi: "otomatik", label: "Puansız" },
+    { puanli: true, puanGirisTipi: "manuel", label: "Yorumlu Puanlı" },
+  ];
+
+  function PuanTipiSecimi({
+    puanli, puanGirisTipi, onChange,
+  }: {
+    puanli: boolean; puanGirisTipi: PuanGirisTipi;
+    onChange: (puanli: boolean, puanGirisTipi: PuanGirisTipi) => void;
+  }) {
+    return (
+      <div>
+        <p className="text-sm font-medium text-slate-700 mb-2">Puan Tipi</p>
+        <div className="flex gap-2 flex-wrap">
+          {PUAN_TIPI_SECENEKLER.map((s) => {
+            const aktif = puanli === s.puanli && puanGirisTipi === s.puanGirisTipi;
+            return (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => onChange(s.puanli, s.puanGirisTipi)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                  aktif ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {aktif && <Check size={13} />}{s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   function SkorlamaSecimi({
     value, onChange,
@@ -257,7 +306,7 @@ export default function FormlarPage() {
                     {form.aciklama || <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3.5 text-center">
-                    <Badge variant={form.puanli ? "puanli" : "puansiz"} />
+                    <Badge variant={formTipBadge(form)} />
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     {form.puanli && form.skorlamaSistemi ? (
@@ -310,22 +359,16 @@ export default function FormlarPage() {
             <textarea value={yeniAciklama} onChange={(e) => setYeniAciklama(e.target.value)} rows={2}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-700 mb-2">Puan Tipi</p>
-            <div className="flex gap-2">
-              {[true, false].map((val) => (
-                <button key={String(val)} type="button" onClick={() => setYeniPuanli(val)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${yeniPuanli === val ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                  {yeniPuanli === val && <Check size={13} />}{val ? "Puanlı" : "Puansız"}
-                </button>
-              ))}
-            </div>
-          </div>
-          {yeniPuanli && (
+          <PuanTipiSecimi
+            puanli={yeniPuanli}
+            puanGirisTipi={yeniPuanGirisTipi}
+            onChange={(p, t) => { setYeniPuanli(p); setYeniPuanGirisTipi(t); }}
+          />
+          {yeniPuanli && yeniPuanGirisTipi !== "manuel" && (
             <SkorlamaSecimi value={yeniSkorlamaSistemi} onChange={setYeniSkorlamaSistemi} />
           )}
           <BolumSecimListesi bolumler={yeniBolumler} sorularById={yeniSorularById} seciliIds={yeniSeciliIds}
-            formPuanli={yeniPuanli}
+            formGerekliSinif={formGerekliSinif(yeniPuanli, yeniPuanGirisTipi)}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
             araVal={yeniBolumAra} onAraChange={setYeniBolumAra} />
           <div className="flex gap-3 pt-1">
@@ -346,7 +389,7 @@ export default function FormlarPage() {
         ) : detayForm ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 flex-wrap">
-              <Badge variant={detayForm.puanli ? "puanli" : "puansiz"} />
+              <Badge variant={formTipBadge(detayForm)} />
               {detayForm.puanli && detayForm.skorlamaSistemi && (
                 <Badge variant={detayForm.skorlamaSistemi} />
               )}
@@ -416,22 +459,16 @@ export default function FormlarPage() {
               <textarea value={editAciklama} onChange={(e) => setEditAciklama(e.target.value)} rows={2}
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-700 mb-2">Puan Tipi</p>
-              <div className="flex gap-2">
-                {[true, false].map((val) => (
-                  <button key={String(val)} type="button" onClick={() => setEditPuanli(val)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${editPuanli === val ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
-                    {editPuanli === val && <Check size={13} />}{val ? "Puanlı" : "Puansız"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {editPuanli && (
+            <PuanTipiSecimi
+              puanli={editPuanli}
+              puanGirisTipi={editPuanGirisTipi}
+              onChange={(p, t) => { setEditPuanli(p); setEditPuanGirisTipi(t); }}
+            />
+            {editPuanli && editPuanGirisTipi !== "manuel" && (
               <SkorlamaSecimi value={editSkorlamaSistemi} onChange={setEditSkorlamaSistemi} />
             )}
             <BolumSecimListesi bolumler={editBolumler} sorularById={editSorularById} seciliIds={editSeciliIds}
-              formPuanli={editPuanli}
+              formGerekliSinif={formGerekliSinif(editPuanli, editPuanGirisTipi)}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
               araVal={editBolumAra} onAraChange={setEditBolumAra} />
             <div className="flex gap-3 pt-1">

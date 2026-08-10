@@ -27,6 +27,63 @@ const ROLLER: KullaniciRol[] = [
   "kameraman",
 ];
 
+function MagazaCheckList({ magazalar, seciliIds, onToggle, onTumunuSec, onTumunuKaldir, araVal, onAraChange }: {
+  magazalar: Magaza[];
+  seciliIds: string[];
+  onToggle: (id: string) => void;
+  onTumunuSec: () => void;
+  onTumunuKaldir: () => void;
+  araVal: string;
+  onAraChange: (v: string) => void;
+}) {
+  const filtreli = magazalar.filter((m) => m.ad.toLowerCase().includes(araVal.toLowerCase()));
+  const hepsiSecili = magazalar.length > 0 && seciliIds.length === magazalar.length;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <p className="text-sm font-medium text-slate-700">Mağaza Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></p>
+        <div className="flex items-center gap-2">
+          {magazalar.length > 0 && (
+            <button
+              type="button"
+              onClick={hepsiSecili ? onTumunuKaldir : onTumunuSec}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline whitespace-nowrap"
+            >
+              {hepsiSecili ? "Tümünü Kaldır" : "Tümünü Seç"}
+            </button>
+          )}
+          {magazalar.length > 4 && (
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
+                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
+            </div>
+          )}
+        </div>
+      </div>
+      {magazalar.length === 0 ? (
+        <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz mağaza yok. Önce mağaza oluşturun.</p>
+      ) : (
+        <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
+          {filtreli.map((m) => {
+            const secili = seciliIds.includes(m.id);
+            return (
+              <button key={m.id} type="button" onClick={() => onToggle(m.id)}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-teal-50" : "hover:bg-slate-50"}`}>
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-teal-600 border-teal-600" : "border-slate-300"}`}>
+                  {secili && <Check size={10} className="text-white" />}
+                </div>
+                <Store size={13} className={secili ? "text-teal-600" : "text-slate-400"} />
+                <span className={`flex-1 text-sm ${secili ? "text-teal-700 font-medium" : "text-slate-700"}`}>{m.ad}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function KullanicilarPage() {
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
   const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
@@ -100,11 +157,13 @@ export default function KullanicilarPage() {
     setEditError("");
     const k = await getKullanici(id);
     if (k) {
+      const gecerliMagazaIdleri = magazalar.map((m) => m.id);
       setEditDisplayName(k.displayName || "");
       setEditRol(k.rol || "kameraman");
       setEditBolgeId(k.bolgeId ?? "");
       setEditMagazaId(k.magazaId ?? "");
-      setEditMagazaIdleri(k.magazaIdleri ?? []);
+      // Silinmiş/artık var olmayan mağazalara ait id'ler filtrelenir — aksi halde sayaç "seçili" gösterir ama listede hiçbir kutu işaretli görünmez.
+      setEditMagazaIdleri((k.magazaIdleri ?? []).filter((mid) => gecerliMagazaIdleri.includes(mid)));
       setEditAktif(k.aktif !== false);
     }
     setEditLoading(false);
@@ -150,45 +209,6 @@ export default function KullanicilarPage() {
   function magazaAdi(id?: string) {
     if (!id) return null;
     return magazalar.find((m) => m.id === id)?.ad ?? null;
-  }
-
-  function MagazaCheckList({ seciliIds, onToggle, araVal, onAraChange }: {
-    seciliIds: string[]; onToggle: (id: string) => void; araVal: string; onAraChange: (v: string) => void;
-  }) {
-    const filtreli = magazalar.filter((m) => m.ad.toLowerCase().includes(araVal.toLowerCase()));
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">Mağaza Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></p>
-          {magazalar.length > 4 && (
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
-            </div>
-          )}
-        </div>
-        {magazalar.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz mağaza yok. Önce mağaza oluşturun.</p>
-        ) : (
-          <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
-            {filtreli.map((m) => {
-              const secili = seciliIds.includes(m.id);
-              return (
-                <button key={m.id} type="button" onClick={() => onToggle(m.id)}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-teal-50" : "hover:bg-slate-50"}`}>
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-teal-600 border-teal-600" : "border-slate-300"}`}>
-                    {secili && <Check size={10} className="text-white" />}
-                  </div>
-                  <Store size={13} className={secili ? "text-teal-600" : "text-slate-400"} />
-                  <span className={`flex-1 text-sm ${secili ? "text-teal-700 font-medium" : "text-slate-700"}`}>{m.ad}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
   }
 
   const showBolgeField = (rol: KullaniciRol) =>
@@ -407,8 +427,11 @@ export default function KullanicilarPage() {
           )}
           {showMagazaCokluField(yeniRol) && (
             <MagazaCheckList
+              magazalar={magazalar}
               seciliIds={yeniMagazaIdleri}
               onToggle={(id) => setYeniMagazaIdleri((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
+              onTumunuSec={() => setYeniMagazaIdleri(magazalar.map((m) => m.id))}
+              onTumunuKaldir={() => setYeniMagazaIdleri([])}
               araVal={yeniMagazaAra}
               onAraChange={setYeniMagazaAra}
             />
@@ -486,8 +509,11 @@ export default function KullanicilarPage() {
             )}
             {showMagazaCokluField(editRol) && (
               <MagazaCheckList
+                magazalar={magazalar}
                 seciliIds={editMagazaIdleri}
                 onToggle={(id) => setEditMagazaIdleri((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
+                onTumunuSec={() => setEditMagazaIdleri(magazalar.map((m) => m.id))}
+                onTumunuKaldir={() => setEditMagazaIdleri([])}
                 araVal={editMagazaAra}
                 onAraChange={setEditMagazaAra}
               />

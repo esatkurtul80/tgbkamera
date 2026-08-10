@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
 import { getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
+import { formGerekliSinif } from "@/lib/homojenlik";
 import type { Bolum, Soru } from "@/types";
 
 export default function FormDuzenlePage() {
@@ -115,7 +116,7 @@ export default function FormDuzenlePage() {
         <div className="bg-white rounded-2xl border border-slate-100 p-6">
           <h2 className="text-sm font-semibold text-slate-800 mb-4">Bölüm Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></h2>
           <BolumSecimListesi bolumler={bolumler} sorularById={sorularById} seciliIds={seciliIds}
-            formPuanli={puanli} onToggle={toggleBolum} boxed={false} />
+            formGerekliSinif={formGerekliSinif(puanli, undefined)} onToggle={toggleBolum} boxed={false} />
         </div>
 
         <div className="flex items-center gap-3">

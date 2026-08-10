@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, FileText, User, Store, Calendar, Check, Loader2 } from "lucide-react";
+import { ChevronRight, FileText, User, Store, Calendar, Check, Loader2, WifiOff } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
 import { generateCustomId } from "@/lib/idUtils";
 import { createDegerlendirme, updateDegerlendirme } from "@/lib/firestore";
 import { uploadDegerlendirmeFoto } from "@/lib/storage";
 import { puansizCevapDoluMu } from "@/lib/puansiz";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { PuansizCevapInput, PuansizNotAlani } from "./PuansizCevapAlani";
 import PuansizFotoStrip from "./PuansizFotoStrip";
 import type { Bolum, Form, Magaza, Personel, PuansizCevapDegeri, Soru, SoruTipi, BolumSnapshot, SoruSnapshot } from "@/types";
@@ -37,6 +38,8 @@ interface PuansizDegerlendirmeFormuProps {
   /** Devam edilen raporun daha önce girilmiş cevapları (varsa). */
   mevcutPuansizCevaplar?: Record<string, PuansizCevapDegeri>;
   mevcutIzlenmeTarihi?: string;
+  /** Devam edilen "yorumlu puanlı" raporun daha önce girilmiş toplam puanı (varsa). */
+  mevcutToplamPuan?: number | null;
   onGeri: () => void;
 }
 
@@ -55,14 +58,26 @@ export default function PuansizDegerlendirmeFormu({
   mevcutId,
   mevcutPuansizCevaplar,
   mevcutIzlenmeTarihi,
+  mevcutToplamPuan,
   onGeri,
 }: PuansizDegerlendirmeFormuProps) {
   const router = useRouter();
+  const online = useOnlineStatus();
+  const isManuel = form.puanli && form.puanGirisTipi === "manuel";
   const [izlenmeTarihi, setIzlenmeTarihi] = useState(mevcutIzlenmeTarihi ?? bugunISO());
   const [puansizCevaplar, setPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri>>(mevcutPuansizCevaplar ?? {});
-  const [pendingFotolar, setPendingFotolar] = useState<Record<string, { file: File; url: string }[]>>({});
+  const [pendingFotolar, setPendingFotolar] = useState<Record<string, { file: File; url: string; hata?: boolean }[]>>({});
+  const [toplamPuanGiris, setToplamPuanGiris] = useState(mevcutToplamPuan != null ? String(mevcutToplamPuan) : "");
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [hata, setHata] = useState("");
+  const [senkronBekliyor, setSenkronBekliyor] = useState(false);
+
+  const bekleyenFotoVarMi = Object.values(pendingFotolar).some((list) => list.length > 0);
+
+  const toplamPuanSayisi = Number(toplamPuanGiris);
+  const toplamPuanGecerli =
+    !isManuel ||
+    (toplamPuanGiris.trim() !== "" && Number.isFinite(toplamPuanSayisi) && toplamPuanSayisi >= 0 && toplamPuanSayisi <= 100);
 
   const tumSorular = bolumDetaylar.flatMap((b) => b.sorular);
 
@@ -76,26 +91,92 @@ export default function PuansizDegerlendirmeFormu({
 
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
+      setSenkronBekliyor(true);
       const tarih = new Date(izlenmeTarihi + "T12:00:00");
       updateDegerlendirme(mevcutId, {
         puansizCevaplar,
         izlenmeTarihi: Timestamp.fromDate(tarih),
-      }).catch(console.error);
+      })
+        .then(() => setSenkronBekliyor(false))
+        .catch((err) => {
+          // Bağlantı kopukken (kısa süreli) yazma başarısız olur — veriler bileşen state'inde
+          // kalmaya devam eder, `online` true olunca bu effect yeniden tetiklenip tekrar dener.
+          console.error(err);
+        });
     }, 800);
 
     return () => {
       if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
     };
-  }, [mevcutId, puansizCevaplar, izlenmeTarihi]);
+  }, [mevcutId, puansizCevaplar, izlenmeTarihi, online]);
 
   function setCevap(soruId: string, patch: Partial<PuansizCevapDegeri>) {
     setPuansizCevaplar((prev) => ({ ...prev, [soruId]: { ...prev[soruId], ...patch } }));
   }
 
+  // Aynı önizleme URL'i için aynı anda birden fazla yükleme denemesi başlatılmasını engeller
+  // (ör. tekrar bağlanınca retry effect'i ile elle "tekrar dene" çakışmasın diye).
+  const yuklemeDevamEdenlerRef = useRef<Set<string>>(new Set());
+
+  function yukleFoto(soruId: string, item: { file: File; url: string }, idx: number) {
+    if (yuklemeDevamEdenlerRef.current.has(item.url)) return;
+    if (!mevcutId) return;
+    yuklemeDevamEdenlerRef.current.add(item.url);
+    setPendingFotolar((prev) => ({
+      ...prev,
+      [soruId]: (prev[soruId] ?? []).map((f) => (f.url === item.url ? { ...f, hata: false } : f)),
+    }));
+
+    uploadDegerlendirmeFoto(
+      { degerlendirmeId: mevcutId, soruId, magazaAd: magaza.ad, personelAd: personel.ad, tarih: izlenmeTarihi },
+      item.file,
+      idx
+    )
+      .then((url) => {
+        setPuansizCevaplar((prev) => ({
+          ...prev,
+          [soruId]: { ...prev[soruId], fotograflar: [...(prev[soruId]?.fotograflar ?? []), url] },
+        }));
+        setPendingFotolar((prev) => ({
+          ...prev,
+          [soruId]: (prev[soruId] ?? []).filter((f) => f.url !== item.url),
+        }));
+        URL.revokeObjectURL(item.url);
+      })
+      .catch((err) => {
+        // Bağlantı kopukken (kısa süreli) yükleme başarısız olur — fotoğraf önizlemesi
+        // "hata" durumuyla listede kalır, `online` true olunca otomatik tekrar denenir.
+        console.error("Fotoğraf yüklenemedi:", err);
+        setPendingFotolar((prev) => ({
+          ...prev,
+          [soruId]: (prev[soruId] ?? []).map((f) => (f.url === item.url ? { ...f, hata: true } : f)),
+        }));
+      })
+      .finally(() => {
+        yuklemeDevamEdenlerRef.current.delete(item.url);
+      });
+  }
+
   function fotoEkle(soruId: string, files: File[]) {
     const yeni = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
     setPendingFotolar((prev) => ({ ...prev, [soruId]: [...(prev[soruId] ?? []), ...yeni] }));
+
+    // Fotoğrafı hemen yükle (Kaydet'e kadar beklemek yerine) — böylece "geri" ile
+    // ekrandan çıkılıp geri dönülse bile fotoğraf kaybolmaz, tıpkı diğer cevaplar gibi
+    // otomatik kayda dahil olur. Taslak henüz oluşmadıysa (nadir), yükleme Kaydet anında yapılır.
+    yeni.forEach((item, idx) => yukleFoto(soruId, item, idx));
   }
+
+  // Bağlantı geri geldiğinde, kısa kesinti sırasında yüklenemeyen fotoğrafları otomatik tekrar dene.
+  useEffect(() => {
+    if (!online) return;
+    Object.entries(pendingFotolar).forEach(([soruId, items]) => {
+      items.forEach((item, idx) => {
+        if (item.hata) yukleFoto(soruId, item, idx);
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
 
   function fotoSil(soruId: string, index: number) {
     setPendingFotolar((prev) => {
@@ -159,6 +240,8 @@ export default function PuansizDegerlendirmeFormu({
 
       const tarih = new Date(izlenmeTarihi + "T12:00:00");
 
+      const toplamPuan = isManuel ? Number(toplamPuanGiris) : null;
+
       if (mevcutId) {
         // Devam edilen açık rapor: mevcut kaydı güncelle ve kapat
         await updateDegerlendirme(mevcutId, {
@@ -167,6 +250,9 @@ export default function PuansizDegerlendirmeFormu({
           puansizCevaplar: uploadedPuansizCevaplar,
           izlenmeTarihi: Timestamp.fromDate(tarih),
           durum: "kapali",
+          puanGirisTipi: form.puanGirisTipi,
+          toplamPuan,
+          maxPuan: null,
         });
         router.push(`/degerlendirmeler/${mevcutId}`);
       } else {
@@ -183,10 +269,11 @@ export default function PuansizDegerlendirmeFormu({
             ay: tarih.getMonth(),
             yil: tarih.getFullYear(),
             durum: "kapali",
-            puanli: false,
+            puanli: form.puanli,
+            puanGirisTipi: form.puanGirisTipi,
             skorlamaSistemi: form.skorlamaSistemi,
             izlenmeler: [],
-            toplamPuan: null,
+            toplamPuan,
             maxPuan: null,
             bolumSnapshot,
             soruSnapshot,
@@ -207,13 +294,44 @@ export default function PuansizDegerlendirmeFormu({
 
   const yuzde = tumSorular.length > 0 ? Math.round((cevaplananSayisi / tumSorular.length) * 100) : 0;
 
+  // Kısa bağlantı kopmalarında ekrandan ayrılırken bekleyen (henüz senkronize olmamış) veri
+  // varsa uyarı gösterilir — sekme kapatma/yenileme için beforeunload, uygulama içi geri için confirm.
+  const bekleyenSenkronVarMi = senkronBekliyor || bekleyenFotoVarMi;
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (!online && bekleyenSenkronVarMi) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [online, bekleyenSenkronVarMi]);
+
+  function handleGeriTikla() {
+    if (!online && bekleyenSenkronVarMi) {
+      const devamEt = window.confirm(
+        "Çevrimdışısınız ve henüz kaydedilmemiş değişiklikler var. Bağlantı gelene kadar bu ekranda kalırsanız otomatik kaydedilecek. Yine de çıkmak istiyor musunuz?"
+      );
+      if (!devamEt) return;
+    }
+    onGeri();
+  }
+
   return (
     <div className="w-full max-w-[1440px] mx-auto py-4 pb-2">
       <nav className="flex items-center gap-1.5 text-sm text-slate-500 mb-4">
-        <button onClick={onGeri} className="hover:text-slate-800 transition-colors">Değerlendirmeler</button>
+        <button onClick={handleGeriTikla} className="hover:text-slate-800 transition-colors">Değerlendirmeler</button>
         <ChevronRight size={14} className="text-slate-300" />
         <span className="text-slate-800 font-medium">{mevcutId ? "Tamamla (Puansız)" : "Yeni (Puansız)"}</span>
       </nav>
+
+      {!online && (
+        <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium px-4 py-2.5 rounded-xl">
+          <WifiOff size={15} className="shrink-0" />
+          Çevrimdışısınız. Cevaplarınız bu cihazda tutuluyor, bağlantı gelince otomatik kaydedilecek.
+        </div>
+      )}
 
       {/* ── Form başlığı ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
@@ -315,6 +433,8 @@ export default function PuansizDegerlendirmeFormu({
                                 ...(pendingFotolar[soru.id] ?? []).map((f, idx) => ({
                                   url: f.url,
                                   onSil: () => fotoSil(soru.id, idx),
+                                  hata: f.hata,
+                                  onTekrarDene: () => yukleFoto(soru.id, f, idx),
                                 })),
                               ]}
                               onEkle={(files) => fotoEkle(soru.id, files)}
@@ -338,6 +458,32 @@ export default function PuansizDegerlendirmeFormu({
         })}
       </div>
 
+      {/* ── Toplam Puan (yorumlu puanlı) ── */}
+      {isManuel && (
+        <div className="mt-6 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="h-1.5 bg-violet-500" />
+          <div className="px-6 py-5">
+            <label className="block text-[15px] font-medium text-slate-800 mb-2">
+              Toplam Puan <span className="text-slate-400 font-normal">(0-100 arası)</span>
+              <span className="text-rose-500 ml-1">*</span>
+            </label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={100}
+              value={toplamPuanGiris}
+              onChange={(e) => setToplamPuanGiris(e.target.value)}
+              placeholder="ör. 87"
+              className="w-full max-w-[200px] px-3.5 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+            {toplamPuanGiris.trim() !== "" && !toplamPuanGecerli && (
+              <p className="text-xs text-rose-500 mt-1.5">Puan 0 ile 100 arasında olmalıdır.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Aksiyon çubuğu ── */}
       <div className="mt-6">
         <div className="flex items-center justify-between gap-3 bg-white rounded-xl border border-slate-200 shadow-sm px-5 py-3.5">
@@ -345,11 +491,12 @@ export default function PuansizDegerlendirmeFormu({
           <div className="ml-auto">
             <button
               onClick={handleKaydet}
-              disabled={!tamamlandi || kaydediliyor}
+              disabled={!tamamlandi || !toplamPuanGecerli || kaydediliyor || !online}
+              title={!online ? "Kaydetmek için internet bağlantısı gerekiyor" : undefined}
               className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-indigo-100"
             >
               {kaydediliyor && <Loader2 size={15} className="animate-spin" />}
-              {kaydediliyor ? "Kaydediliyor..." : "Değerlendirmeyi Kaydet"}
+              {!online ? "Bağlantı yok" : kaydediliyor ? "Kaydediliyor..." : "Değerlendirmeyi Kaydet"}
             </button>
           </div>
         </div>

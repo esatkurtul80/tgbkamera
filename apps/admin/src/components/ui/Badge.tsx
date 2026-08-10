@@ -3,6 +3,7 @@ import type { KullaniciRol, SoruTipi } from "@/types";
 type BadgeVariant =
   | "puanli"
   | "puansiz"
+  | "yorumlu_puanli"
   | "aktif"
   | "pasif"
   | "esik"
@@ -13,6 +14,7 @@ type BadgeVariant =
 const styles: Record<BadgeVariant, string> = {
   puanli: "bg-indigo-50 text-indigo-600",
   puansiz: "bg-slate-100 text-slate-500",
+  yorumlu_puanli: "bg-violet-50 text-violet-600",
   aktif: "bg-emerald-50 text-emerald-600",
   pasif: "bg-red-50 text-red-500",
   esik: "bg-amber-50 text-amber-600",
@@ -34,6 +36,7 @@ const styles: Record<BadgeVariant, string> = {
 const labels: Record<BadgeVariant, string> = {
   puanli: "Puanlı",
   puansiz: "Puansız",
+  yorumlu_puanli: "Yorumlu Puanlı",
   aktif: "Aktif",
   pasif: "Pasif",
   esik: "Eşik",

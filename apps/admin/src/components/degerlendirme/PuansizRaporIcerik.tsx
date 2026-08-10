@@ -20,6 +20,7 @@ interface PuansizRaporIcerikProps {
 const PuansizRaporIcerik = forwardRef<HTMLDivElement, PuansizRaporIcerikProps>(
   function PuansizRaporIcerik({ d }, ref) {
     const bolumSirasi = Object.keys(d.bolumSnapshot);
+    const isYorumluPuanli = d.puanli === true && d.puanGirisTipi === "manuel";
 
     return (
       <div ref={ref} className="w-full bg-slate-50">
@@ -29,7 +30,7 @@ const PuansizRaporIcerik = forwardRef<HTMLDivElement, PuansizRaporIcerikProps>(
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg font-bold text-slate-900">{d.formAd}</h1>
-                <Badge variant="puansiz" />
+                <Badge variant={isYorumluPuanli ? "yorumlu_puanli" : "puansiz"} />
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600">
                 <span className="inline-flex items-center gap-1.5">
@@ -51,6 +52,12 @@ const PuansizRaporIcerik = forwardRef<HTMLDivElement, PuansizRaporIcerikProps>(
                 )}
               </div>
             </div>
+            {isYorumluPuanli && d.toplamPuan !== null && (
+              <div className="text-right shrink-0">
+                <p className="text-4xl font-bold text-violet-600">{d.toplamPuan}</p>
+                <p className="text-xs text-slate-400">puan</p>
+              </div>
+            )}
           </div>
         </div>
 

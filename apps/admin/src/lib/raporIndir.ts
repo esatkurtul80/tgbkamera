@@ -1,7 +1,9 @@
 import type { Degerlendirme } from "@/types";
 
 function isPuansizYeniFormat(d: Degerlendirme): boolean {
-  return d.puanli === false && d.puansizCevaplar !== undefined;
+  // Matris/otomatik-puanlı raporlarda da puansizCevaplar taslak aşamasında {} olarak set edilir,
+  // bu yüzden tek başına yeterli değil — form gerçekten puansız-şekilli mi diye de bakılmalı.
+  return d.puansizCevaplar !== undefined && (d.puanli === false || d.puanGirisTipi === "manuel");
 }
 
 /**

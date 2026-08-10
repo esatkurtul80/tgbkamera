@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, RotateCw } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export interface PuansizFoto {
   /** Zaten yüklenmiş bir fotoğraf için Storage URL'i, henüz yüklenmemiş bir seçim için objectURL önizlemesi. */
   url: string;
   onSil?: () => void;
+  /** Yükleme başarısız oldu mu (ör. bağlantı kopukluğu) — kırmızı çerçeve + tekrar dene ile gösterilir. */
+  hata?: boolean;
+  onTekrarDene?: () => void;
 }
 
 interface PuansizFotoStripProps {
@@ -29,11 +32,19 @@ export default function PuansizFotoStrip({ fotograflar, onEkle, readOnly = false
           <div key={f.url + i} className="relative group/foto">
             <button
               type="button"
-              onClick={() => setBuyukGoster(f.url)}
-              className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm hover:shadow-md hover:border-slate-300 transition-all"
+              onClick={() => (f.hata && f.onTekrarDene ? f.onTekrarDene() : setBuyukGoster(f.url))}
+              className={`w-16 h-16 rounded-xl overflow-hidden border bg-slate-50 shadow-sm hover:shadow-md transition-all ${
+                f.hata ? "border-2 border-rose-400" : "border-slate-200 hover:border-slate-300"
+              }`}
+              title={f.hata ? "Yüklenemedi — tekrar denemek için tıklayın" : undefined}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.url} alt="" className="w-full h-full object-cover transition-transform group-hover/foto:scale-105" />
+              <img src={f.url} alt="" className={`w-full h-full object-cover transition-transform group-hover/foto:scale-105 ${f.hata ? "opacity-60" : ""}`} />
+              {f.hata && (
+                <span className="absolute inset-0 flex items-center justify-center bg-rose-900/20">
+                  <RotateCw size={16} className="text-white drop-shadow" />
+                </span>
+              )}
             </button>
             {!readOnly && f.onSil && (
               <button

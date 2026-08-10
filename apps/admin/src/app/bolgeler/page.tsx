@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Map, Pencil, Trash2, Search, Plus, CheckCircle2, XCircle } from "lucide-react";
+import { Map, Pencil, Trash2, Search, Plus, CheckCircle2, XCircle, Store } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
@@ -13,12 +13,15 @@ import {
   updateBolge,
   deleteBolge,
   getKullanicilar,
+  getMagazalar,
+  updateMagaza,
 } from "@/lib/firestore";
-import type { Bolge, Kullanici } from "@/types";
+import type { Bolge, Kullanici, Magaza } from "@/types";
 
 export default function BolgelerPage() {
   const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
+  const [magazalar, setMagazalar] = useState<Magaza[]>([]);
   const [loading, setLoading] = useState(true);
   const [ara, setAra] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -41,6 +44,8 @@ export default function BolgelerPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+  const [editSeciliMagazaIds, setEditSeciliMagazaIds] = useState<Set<string>>(new Set());
+  const [editMagazaAra, setEditMagazaAra] = useState("");
 
   const bolgeMudurleri = kullanicilar.filter(
     (k) => k.rol === "bolge_muduru" || k.rol === "admin" || k.rol === "ust_yonetici"
@@ -48,9 +53,10 @@ export default function BolgelerPage() {
 
   async function load() {
     setLoading(true);
-    const [b, k] = await Promise.all([getBolgeler(), getKullanicilar()]);
+    const [b, k, m] = await Promise.all([getBolgeler(), getKullanicilar(), getMagazalar()]);
     setBolgeler(b);
     setKullanicilar(k);
+    setMagazalar(m);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -78,6 +84,7 @@ export default function BolgelerPage() {
     setEditId(id);
     setEditLoading(true);
     setEditError("");
+    setEditMagazaAra("");
     const b = await getBolge(id);
     if (b) {
       setEditAd(b.ad);
@@ -85,7 +92,17 @@ export default function BolgelerPage() {
       setEditBolgeMuduruId(b.bolgeMuduruId ?? "");
       setEditAktif(b.aktif);
     }
+    setEditSeciliMagazaIds(new Set(magazalar.filter((m) => m.bolgeId === id).map((m) => m.id)));
     setEditLoading(false);
+  }
+
+  function toggleEditMagaza(id: string) {
+    setEditSeciliMagazaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   async function handleEditSave(e: React.FormEvent) {
@@ -98,6 +115,26 @@ export default function BolgelerPage() {
       bolgeMuduruId: editBolgeMuduruId || undefined,
       aktif: editAktif,
     });
+
+    // Mağaza atamalarını eşitle: seçilenler bu bölgeye bağlanır,
+    // daha önce bu bölgeye bağlıyken seçimi kaldırılanlar bölgesizleşir.
+    const guncellenecekler = magazalar.filter((m) => {
+      const seciliMi = editSeciliMagazaIds.has(m.id);
+      const zatenBuBolgede = m.bolgeId === editId;
+      return seciliMi !== zatenBuBolgede;
+    });
+    await Promise.all(
+      guncellenecekler.map((m) =>
+        updateMagaza(m.id, {
+          ad: m.ad,
+          adres: m.adres,
+          bolgeId: editSeciliMagazaIds.has(m.id) ? editId : undefined,
+          magazaSorumlusuId: m.magazaSorumlusuId,
+          aktif: m.aktif,
+        })
+      )
+    );
+
     setEditSaving(false);
     setEditId(null);
     load();
@@ -121,6 +158,19 @@ export default function BolgelerPage() {
     if (!id) return null;
     return kullanicilar.find((k) => k.id === id)?.displayName ?? null;
   }
+
+  function bolgeAdiById(id?: string) {
+    if (!id) return null;
+    return bolgeler.find((b) => b.id === id)?.ad ?? null;
+  }
+
+  function magazaSayisi(bolgeId: string) {
+    return magazalar.filter((m) => m.bolgeId === bolgeId).length;
+  }
+
+  const filtrelenmisMagazalar = magazalar.filter((m) =>
+    m.ad.toLowerCase().includes(editMagazaAra.toLowerCase())
+  );
 
   const SelectField = ({
     label, value, onChange, options, placeholder,
@@ -197,8 +247,8 @@ export default function BolgelerPage() {
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bölge Adı</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Açıklama</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bölge Müdürü</th>
+                <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">Mağaza Sayısı</th>
                 <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Durum</th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">İşlemler</th>
               </tr>
@@ -215,9 +265,6 @@ export default function BolgelerPage() {
                       <span className="text-sm font-medium text-slate-800">{bolge.ad}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-slate-500 max-w-xs truncate">
-                    {bolge.aciklama || <span className="text-slate-300">—</span>}
-                  </td>
                   <td className="px-4 py-3.5 text-sm text-slate-600">
                     {bolge.bolgeMuduruId ? (
                       <div className="flex items-center gap-1.5">
@@ -231,6 +278,11 @@ export default function BolgelerPage() {
                     ) : (
                       <span className="text-slate-300">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full">
+                      <Store size={11} /> {magazaSayisi(bolge.id)}
+                    </span>
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     <Badge variant={bolge.aktif ? "aktif" : "pasif"} />
@@ -309,7 +361,7 @@ export default function BolgelerPage() {
       </Modal>
 
       {/* Düzenle Modal */}
-      <Modal open={!!editId} onClose={() => setEditId(null)} title="Bölgeyi Düzenle">
+      <Modal open={!!editId} onClose={() => setEditId(null)} title="Bölgeyi Düzenle" size="lg">
         {editLoading ? (
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -344,6 +396,47 @@ export default function BolgelerPage() {
               options={bolgeMudurleri.map((k) => ({ value: k.id, label: k.displayName }))}
               placeholder="Seçin..."
             />
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Bu Bölgeye Bağlı Mağazalar
+                <span className="text-slate-400 font-normal"> ({editSeciliMagazaIds.size} seçili)</span>
+              </label>
+              <input
+                type="text"
+                value={editMagazaAra}
+                onChange={(e) => setEditMagazaAra(e.target.value)}
+                placeholder="Mağaza ara..."
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-t-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+              />
+              <div className="max-h-52 overflow-y-auto border border-t-0 border-slate-200 rounded-b-lg divide-y divide-slate-50">
+                {filtrelenmisMagazalar.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-slate-400">Eşleşen mağaza yok.</p>
+                ) : (
+                  filtrelenmisMagazalar.map((m) => {
+                    const baskaBolgeAdi = m.bolgeId && m.bolgeId !== editId ? bolgeAdiById(m.bolgeId) : null;
+                    return (
+                      <label
+                        key={m.id}
+                        className="flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editSeciliMagazaIds.has(m.id)}
+                          onChange={() => toggleEditMagaza(m.id)}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="flex-1 text-slate-700">{m.ad}</span>
+                        {baskaBolgeAdi && (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded shrink-0">
+                            {baskaBolgeAdi}&apos;dan taşınacak
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
             <div>
               <p className="text-sm font-medium text-slate-700 mb-2">Durum</p>
               <div className="flex gap-2">

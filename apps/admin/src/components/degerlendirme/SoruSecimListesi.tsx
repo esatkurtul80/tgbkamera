@@ -2,7 +2,7 @@
 
 import { Search, Check } from "lucide-react";
 import Badge from "@/components/ui/Badge";
-import { soruSinifi, bolumSinifi } from "@/lib/homojenlik";
+import { soruSinifi, bolumSinifi, soruSinifiEtiketi } from "@/lib/homojenlik";
 import type { Soru } from "@/types";
 
 interface SoruSecimListesiProps {
@@ -45,7 +45,7 @@ export default function SoruSecimListesi({
             type="button"
             disabled={uyumsuz}
             onClick={() => onToggle(soru.id)}
-            title={uyumsuz ? `Bu bölüm zaten ${kilitliSinif === "puanli" ? "puanlı" : "puansız"} sorulardan oluşuyor` : undefined}
+            title={uyumsuz ? `Bu bölüm zaten ${kilitliSinif ? soruSinifiEtiketi(kilitliSinif) : ""} sorulardan oluşuyor` : undefined}
             className={`flex items-center gap-3 w-full text-left transition-colors ${
               boxed ? "px-3 py-2.5" : "py-3"
             } ${uyumsuz ? "opacity-40 cursor-not-allowed" : secili ? (boxed ? "bg-indigo-50" : "") : "hover:bg-slate-50"}`}

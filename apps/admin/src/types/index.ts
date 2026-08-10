@@ -9,6 +9,8 @@ export type SoruTipi =
   | "saat"
   | "kisa_metin"
   | "yorum";
+/** puanli: matris/skorlu (tip yok) | puansiz: serbest tipli, form puansız | yorumlu_puanli: serbest tipli, form manuel toplam puanlı */
+export type SoruKategori = "puanli" | "puansiz" | "yorumlu_puanli";
 export type KullaniciRol =
   | "admin"
   | "sirketsahibi"
@@ -68,6 +70,8 @@ export interface Soru {
   puan: number;
   hedefYuzde?: number;
   tip?: SoruTipi;
+  /** yoksa eski kayıtlar için tip varlığına göre türetilir (bkz. lib/homojenlik soruSinifi) */
+  kategori?: SoruKategori;
   olusturmaTarihi: Timestamp;
   guncellemeTarihi: Timestamp;
 }
@@ -86,6 +90,8 @@ export interface Form {
   ad: string;
   aciklama: string;
   puanli: boolean;
+  /** puanli=true iken: "otomatik" (matris/izlenme bazlı, varsayılan) | "manuel" (yorumlu puanlı — puansız gibi cevaplanır, puan elle girilir) */
+  puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
   bolumIdleri: string[];
   olusturmaTarihi: Timestamp;
@@ -129,6 +135,9 @@ export interface SoruIzlenme {
   id: string;
   tarih: Timestamp;
   cevaplar: Record<string, CevapSecenegi>;
+  /** Bu günün işaretlemesini yapan kullanıcı — yalnızca canlı ekranda gösterilir, export/PDF'e taşınmaz. */
+  kaydedenId?: string;
+  kaydedenAd?: string;
 }
 
 export type DegerlendirmeDurum = 'acik' | 'kapali';
@@ -153,6 +162,8 @@ export interface Degerlendirme {
   durum?: DegerlendirmeDurum;
 
   puanli: boolean;
+  /** puanli=true iken: "otomatik" (matris/izlenme bazlı, varsayılan) | "manuel" (yorumlu puanlı — puansız gibi cevaplanır, puan elle girilir). Formdan snapshot alınır. */
+  puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
 
   /** Çoklu izlenme anları (yeni format) */
@@ -170,7 +181,7 @@ export interface Degerlendirme {
   izlenmeTarihi?: Timestamp;
   raporlamaTarihi?: Timestamp;
 
-  /** Puansız formlar için soru başına tip'e göre cevap — sadece puanli false iken kullanılır */
+  /** Puansız veya yorumlu puanlı formlar için soru başına tip'e göre cevap */
   puansizCevaplar?: Record<string, PuansizCevapDegeri>;
 }
 

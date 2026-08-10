@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers } from "lucide-react";
+import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff } from "lucide-react";
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
@@ -12,12 +12,19 @@ import {
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from "@/lib/skorlama";
 import PuansizDegerlendirmeFormu from "@/components/degerlendirme/PuansizDegerlendirmeFormu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import type { Form, Personel, Bolum, Soru, CevapSecenegi, BolumSnapshot, SoruSnapshot, Magaza, PuansizCevapDegeri } from "@/types";
 import { Timestamp } from "firebase/firestore";
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 interface BolumDetay extends Bolum { sorular: Soru[] }
-interface IzlenmeLocal { id: string; tarih: Date; cevaplar: Record<string, CevapSecenegi | undefined> }
+interface IzlenmeLocal {
+  id: string;
+  tarih: Date;
+  cevaplar: Record<string, CevapSecenegi | undefined>;
+  kaydedenId?: string;
+  kaydedenAd?: string;
+}
 
 /* ─── Constants ─────────────────────────────────────────────────────────────── */
 const AYLAR   = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -114,6 +121,7 @@ function SaatInput({ izId, tarih, onCommit }: { izId: string; tarih: Date; onCom
 /* ─── Main ───────────────────────────────────────────────────────────────────── */
 function YeniDegerlendirmeIcerik() {
   const router = useRouter();
+  const online = useOnlineStatus();
   const searchParams = useSearchParams();
   const { user, kullanici } = useAuth();
   const now = new Date();
@@ -143,12 +151,15 @@ function YeniDegerlendirmeIcerik() {
   const [onaylaId,     setOnaylaId]   = useState<string | null>(null); // silme onay
   const [hoverCol,     setHoverCol]   = useState<string | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [senkronBekliyor, setSenkronBekliyor] = useState(false);
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
   const [degId, setDegId] = useState<string | null>(null);
   // Devam edilen açık puansız raporun mevcut cevapları (varsa)
   const [devamPuansizCevaplar, setDevamPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri> | undefined>(undefined);
   const [devamIzlenmeTarihi, setDevamIzlenmeTarihi] = useState<string | undefined>(undefined);
+  // Devam edilen açık "yorumlu puanlı" raporun mevcut toplam puanı (varsa)
+  const [devamToplamPuan, setDevamToplamPuan] = useState<number | null | undefined>(undefined);
   // Otomatik kayıt debounce timer ref
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Aynı parametrelerle (React Strict Mode'un effect'i iki kez çalıştırması,
@@ -197,10 +208,13 @@ function YeniDegerlendirmeIcerik() {
             id: iz.id,
             tarih: iz.tarih.toDate(),
             cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+            kaydedenId: iz.kaydedenId,
+            kaydedenAd: iz.kaydedenAd,
           }));
           setIzlenmeler(localIzlenmeler);
           setDevamPuansizCevaplar(deg.puansizCevaplar);
           setDevamIzlenmeTarihi(deg.izlenmeTarihi ? deg.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
+          setDevamToplamPuan(deg.toplamPuan);
           setDegId(devamId);
           setAdim("tablo");
 
@@ -239,6 +253,7 @@ function YeniDegerlendirmeIcerik() {
             setIzlenmeler(localIzlenmeler);
             setDevamPuansizCevaplar(mevcutAcikRapor.puansizCevaplar);
             setDevamIzlenmeTarihi(mevcutAcikRapor.izlenmeTarihi ? mevcutAcikRapor.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
+            setDevamToplamPuan(mevcutAcikRapor.toplamPuan);
             setDegId(mevcutAcikRapor.id);
           } else {
             const anahtar = `${paramMagazaId}|${paramPersonelId}|${paramFormId}`;
@@ -263,7 +278,7 @@ function YeniDegerlendirmeIcerik() {
                 magazaId: paramMagazaId, magazaAd: magazaObj?.ad ?? "",
                 kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
                 ay: now.getMonth(), yil: now.getFullYear(),
-                puanli: form.puanli, skorlamaSistemi: form.skorlamaSistemi,
+                puanli: form.puanli, puanGirisTipi: form.puanGirisTipi, skorlamaSistemi: form.skorlamaSistemi,
                 izlenmeler: [], toplamPuan: null, maxPuan: null,
                 bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
                 cevaplar: {}, puansizCevaplar: {},
@@ -337,10 +352,13 @@ function YeniDegerlendirmeIcerik() {
         id: iz.id,
         tarih: iz.tarih.toDate(),
         cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+        kaydedenId: iz.kaydedenId,
+        kaydedenAd: iz.kaydedenAd,
       }));
       setIzlenmeler(localIzlenmeler);
       setDevamPuansizCevaplar(mevcutAcikRapor.puansizCevaplar);
       setDevamIzlenmeTarihi(mevcutAcikRapor.izlenmeTarihi ? mevcutAcikRapor.izlenmeTarihi.toDate().toISOString().split("T")[0] : undefined);
+      setDevamToplamPuan(mevcutAcikRapor.toplamPuan);
       setDegId(mevcutAcikRapor.id);
     } else {
       // Açık raporu (puanlı: aylık matris / puansız: tek form) hemen oluştur —
@@ -361,7 +379,7 @@ function YeniDegerlendirmeIcerik() {
         magazaId: seciliMagId, magazaAd: magazaObj?.ad ?? "",
         kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
         ay: seciliAy, yil: seciliYil,
-        puanli: form.puanli, skorlamaSistemi: form.skorlamaSistemi,
+        puanli: form.puanli, puanGirisTipi: form.puanGirisTipi, skorlamaSistemi: form.skorlamaSistemi,
         izlenmeler: [], toplamPuan: null, maxPuan: null,
         bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
         cevaplar: {}, puansizCevaplar: {},
@@ -393,7 +411,10 @@ function YeniDegerlendirmeIcerik() {
 
   function izlenmeEkle(gun: number) {
     const t = new Date(seciliYil, seciliAy, gun, now.getHours(), now.getMinutes());
-    setIzlenmeler(p => [...p, { id: crypto.randomUUID(), tarih: t, cevaplar: {} }]);
+    setIzlenmeler(p => [...p, {
+      id: crypto.randomUUID(), tarih: t, cevaplar: {},
+      kaydedenId: user?.uid, kaydedenAd: kullanici?.displayName ?? user?.displayName ?? "",
+    }]);
   }
   function izlenmeSil(id: string) { setIzlenmeler(p => p.filter(i => i.id !== id)); }
   const setCevap = useCallback((izId: string, soruId: string, cevap: CevapSecenegi | undefined) => {
@@ -428,6 +449,8 @@ function YeniDegerlendirmeIcerik() {
         cevaplar: Object.fromEntries(
           Object.entries(i.cevaplar).filter(([, v]) => v)
         ) as Record<string, CevapSecenegi>,
+        kaydedenId: i.kaydedenId,
+        kaydedenAd: i.kaydedenAd,
       }));
       let tp: number | null = null, mp: number | null = null;
       if (seciliForm?.puanli && Object.keys(soruSnap).length > 0) {
@@ -437,9 +460,23 @@ function YeniDegerlendirmeIcerik() {
         );
         tp = h.toplamPuan; mp = h.maxPuan;
       }
-      await updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp).catch(console.error);
+      setSenkronBekliyor(true);
+      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp)
+        .then(() => setSenkronBekliyor(false))
+        .catch(console.error); // Bağlantı kopukken hata verir; `online` deps'e eklendiği için bağlantı gelince tekrar dener.
     }, 800);
-  }, [izlenmeler, degId, adim, seciliForm, soruSnap]);
+  }, [izlenmeler, degId, adim, seciliForm, soruSnap, online]);
+
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (!online && senkronBekliyor) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [online, senkronBekliyor]);
 
   const puan = useMemo(() => {
     if (!seciliForm?.puanli) return null;
@@ -464,6 +501,7 @@ function YeniDegerlendirmeIcerik() {
       .map(i => ({
         id: i.id, tarih: Timestamp.fromDate(i.tarih),
         cevaplar: Object.fromEntries(Object.entries(i.cevaplar).filter(([, v]) => v)) as Record<string, CevapSecenegi>,
+        kaydedenId: i.kaydedenId, kaydedenAd: i.kaydedenAd,
       }));
 
     let toplamPuan: number | null = null, maxPuan: number | null = null;
@@ -604,8 +642,8 @@ function YeniDegerlendirmeIcerik() {
     </div>
   );
 
-  /* ════════ PUANSIZ — TEK SEFERLİK FORM ════════════════════════════════════════ */
-  if (seciliForm && seciliForm.puanli === false && personel && magaza) {
+  /* ════════ PUANSIZ / YORUMLU PUANLI — TEK SEFERLİK FORM ════════════════════════ */
+  if (seciliForm && (seciliForm.puanli === false || seciliForm.puanGirisTipi === "manuel") && personel && magaza) {
     return (
       <PuansizDegerlendirmeFormu
         form={seciliForm}
@@ -617,6 +655,7 @@ function YeniDegerlendirmeIcerik() {
         mevcutId={degId ?? undefined}
         mevcutPuansizCevaplar={devamPuansizCevaplar}
         mevcutIzlenmeTarihi={devamIzlenmeTarihi}
+        mevcutToplamPuan={devamToplamPuan}
         onGeri={() => router.back()}
       />
     );
@@ -651,7 +690,23 @@ function YeniDegerlendirmeIcerik() {
           )}
         </div>
         <div className="flex items-center gap-4 shrink-0">
-          <button onClick={() => router.back()} className="flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
+          {!online && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 border border-amber-400/30 px-2.5 py-1 rounded-full">
+              <WifiOff size={12} /> Çevrimdışı — bağlantı gelince kaydedilecek
+            </span>
+          )}
+          <button
+            onClick={() => {
+              if (!online && senkronBekliyor) {
+                const devamEt = window.confirm(
+                  "Çevrimdışısınız ve henüz kaydedilmemiş değişiklikler var. Bağlantı gelene kadar bu ekranda kalırsanız otomatik kaydedilecek. Yine de çıkmak istiyor musunuz?"
+                );
+                if (!devamEt) return;
+              }
+              router.back();
+            }}
+            className="flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+          >
             <ChevronRight size={14} className="rotate-180" /> Geri
           </button>
         </div>
@@ -729,12 +784,17 @@ function YeniDegerlendirmeIcerik() {
                         title="Bu Saati Sil">
                         <Trash2 size={13} strokeWidth={2.5} />
                       </button>
-                      <button onClick={() => izlenmeEkle(gun)} 
+                      <button onClick={() => izlenmeEkle(gun)}
                         className="text-blue-500 hover:text-blue-700 transition-colors shrink-0"
                         title="Yeni Saat Ekle">
                         <Plus size={14} strokeWidth={2.5} />
                       </button>
                     </div>
+                    {iz.kaydedenAd && (
+                      <div className="mt-1 text-center" title={`Bu günü işaretleyen: ${iz.kaydedenAd}`}>
+                        <span className="text-[9px] font-medium text-slate-400 truncate block px-1">{iz.kaydedenAd}</span>
+                      </div>
+                    )}
                   </th>
                 ));
                 

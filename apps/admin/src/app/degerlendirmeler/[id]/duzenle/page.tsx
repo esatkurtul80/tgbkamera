@@ -45,9 +45,10 @@ export default function DegerlendirmeDuzenlePage() {
   // Matris format
   const [izlenmeler, setIzlenmeler] = useState<SoruIzlenme[]>([]);
 
-  // Puansız (tek seferlik) format
+  // Puansız / yorumlu puanlı (tek seferlik) format
   const [puansizCevaplar, setPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri>>({});
   const [pendingFotolar, setPendingFotolar] = useState<Record<string, { file: File; url: string }[]>>({});
+  const [toplamPuanDuzen, setToplamPuanDuzen] = useState("");
 
   useEffect(() => {
     getDegerlendirme(id).then(d => {
@@ -58,6 +59,7 @@ export default function DegerlendirmeDuzenlePage() {
         setCevaplar({ ...(d.cevaplar ?? {}) });
         setIzlenmeler(d.izlenmeler ? d.izlenmeler.map(iz => ({ ...iz, cevaplar: { ...iz.cevaplar } })) : []);
         setPuansizCevaplar({ ...(d.puansizCevaplar ?? {}) });
+        setToplamPuanDuzen(d.toplamPuan != null ? String(d.toplamPuan) : "");
       }
       setLoading(false);
     });
@@ -122,9 +124,11 @@ export default function DegerlendirmeDuzenlePage() {
       const guncelPuansizCevaplar = { ...puansizCevaplar };
       entries.forEach(([soruId, cevap]) => { if (cevap) guncelPuansizCevaplar[soruId] = cevap; });
 
+      const isManuel = data.puanli === true && data.puanGirisTipi === "manuel";
       await updateDegerlendirme(id, {
         ...(izlenmeTarihi ? { izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi)) } : {}),
         puansizCevaplar: guncelPuansizCevaplar,
+        ...(isManuel ? { toplamPuan: Number(toplamPuanDuzen), maxPuan: null } : {}),
       });
     } else if (isLegacy) {
       let toplamPuan: number | null = null;
@@ -166,7 +170,12 @@ export default function DegerlendirmeDuzenlePage() {
   if (!data) return <p className="text-sm text-slate-500">Değerlendirme bulunamadı.</p>;
 
   const isLegacy = !data.izlenmeler || data.izlenmeler.length === 0;
-  const isPuansizNewFormat = data.puanli === false && data.puansizCevaplar !== undefined;
+  const isManuel = data.puanli === true && data.puanGirisTipi === "manuel";
+  const isPuansizNewFormat = data.puansizCevaplar !== undefined && (data.puanli === false || isManuel);
+  const toplamPuanDuzenSayisi = Number(toplamPuanDuzen);
+  const toplamPuanGecerli =
+    !isManuel ||
+    (toplamPuanDuzen.trim() !== "" && Number.isFinite(toplamPuanDuzenSayisi) && toplamPuanDuzenSayisi >= 0 && toplamPuanDuzenSayisi <= 100);
   const bolumSirasi = Object.keys(data.bolumSnapshot);
 
   const siralanmis = [...izlenmeler].sort((a, b) => a.tarih.toMillis() - b.tarih.toMillis());
@@ -215,7 +224,7 @@ export default function DegerlendirmeDuzenlePage() {
             <div className="flex items-center gap-2">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !toplamPuanGecerli}
                 className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60"
               >
                 {saving ? "Kaydediliyor..." : "Güncelle"}
@@ -230,17 +239,37 @@ export default function DegerlendirmeDuzenlePage() {
           </div>
 
           {(isLegacy || isPuansizNewFormat) && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">İzlenme Tarihi</label>
-              <div className="relative w-full max-w-xs">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type="date"
-                  value={izlenmeTarihi}
-                  onChange={e => setIzlenmeTarihi(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">İzlenme Tarihi</label>
+                <div className="relative w-full max-w-xs">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={izlenmeTarihi}
+                    onChange={e => setIzlenmeTarihi(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
+              {isManuel && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Toplam Puan <span className="text-slate-400 font-normal">(0-100)</span></label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    value={toplamPuanDuzen}
+                    onChange={e => setToplamPuanDuzen(e.target.value)}
+                    placeholder="ör. 87"
+                    className="w-full max-w-[160px] px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  {toplamPuanDuzen.trim() !== "" && !toplamPuanGecerli && (
+                    <p className="text-xs text-rose-500 mt-1">Puan 0 ile 100 arasında olmalıdır.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
