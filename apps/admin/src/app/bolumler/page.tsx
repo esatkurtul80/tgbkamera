@@ -7,6 +7,7 @@ import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import Badge from "@/components/ui/Badge";
 import SoruSecimListesi from "@/components/degerlendirme/SoruSecimListesi";
+import SeciliSoruSiralama from "@/components/degerlendirme/SeciliSoruSiralama";
 import { getBolumler, deleteBolum, createBolum, getBolum, updateBolum, getSorular } from "@/lib/firestore";
 import type { Bolum, Soru } from "@/types";
 
@@ -174,6 +175,9 @@ export default function BolumlerPage() {
             <textarea value={yeniAciklama} onChange={(e) => setYeniAciklama(e.target.value)} rows={2}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
+          <SeciliSoruSiralama sorular={yeniSorular} seciliIds={yeniSeciliIds}
+            onReorder={setYeniSeciliIds}
+            onRemove={(id) => setYeniSeciliIds((p) => p.filter((x) => x !== id))} />
           <SoruSecimListesi sorular={yeniSorular} seciliIds={yeniSeciliIds}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
             araVal={yeniSoruAra} onAraChange={setYeniSoruAra} />
@@ -225,6 +229,9 @@ export default function BolumlerPage() {
               <textarea value={editAciklama} onChange={(e) => setEditAciklama(e.target.value)} rows={2}
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
             </div>
+            <SeciliSoruSiralama sorular={editSorular} seciliIds={editSeciliIds}
+              onReorder={setEditSeciliIds}
+              onRemove={(id) => setEditSeciliIds((p) => p.filter((x) => x !== id))} />
             <SoruSecimListesi sorular={editSorular} seciliIds={editSeciliIds}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
               araVal={editSoruAra} onAraChange={setEditSoruAra} />

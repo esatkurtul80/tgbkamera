@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import SoruSecimListesi from "@/components/degerlendirme/SoruSecimListesi";
+import SeciliSoruSiralama from "@/components/degerlendirme/SeciliSoruSiralama";
 import { getBolum, updateBolum, getSorular } from "@/lib/firestore";
 import type { Soru } from "@/types";
 
@@ -85,6 +86,17 @@ export default function BolumDuzenlePage() {
             />
           </div>
         </div>
+
+        {seciliIds.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 p-6">
+            <SeciliSoruSiralama
+              sorular={sorular}
+              seciliIds={seciliIds}
+              onReorder={setSeciliIds}
+              onRemove={toggleSoru}
+            />
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-slate-100 p-6">
           <h2 className="text-sm font-semibold text-slate-800 mb-4">Soru Ata <span className="text-slate-400 font-normal">({seciliIds.length} seçili)</span></h2>
