@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
-  LogOut, Camera, PanelLeftClose, MapIcon, Store, UserCog,
+  LogOut, Camera, PanelLeftClose, PanelLeftOpen, MapIcon, Store, UserCog,
   TrendingUp, Plus, BarChart2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -109,6 +110,7 @@ const kameramanSections: NavSection[] = [
     label: "RAPORLAMA",
     items: [
       { name: "Değerlendirmelerim", href: "/degerlendirmeler", icon: TrendingUp },
+      { name: "Tüm Değerlendirmeler", href: "/tum-degerlendirmeler", icon: ClipboardList },
     ],
   },
 ];
@@ -121,23 +123,48 @@ function getSections(rol?: KullaniciRol): NavSection[] {
   return adminSections;
 }
 
+const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { signOut, kullanici } = useAuth();
   const sections = getSections(kullanici?.rol);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   return (
-    <aside className="w-56 flex flex-col bg-white border-r border-slate-100 h-screen shrink-0">
+    <aside
+      className={`flex flex-col bg-white border-r border-slate-100 h-screen shrink-0 transition-[width] duration-200 ${
+        collapsed ? "w-17" : "w-56"
+      }`}
+    >
       {/* Logo */}
-      <div className="flex items-center justify-between px-5 py-[18px] border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center">
-            <Camera size={14} className="text-white" />
+      <div className={`flex items-center px-5 py-4.5 border-b border-slate-100 ${collapsed ? "justify-center" : "justify-between"}`}>
+        {!collapsed && (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center shrink-0">
+              <Camera size={14} className="text-white" />
+            </div>
+            <span className="font-semibold text-slate-900 text-sm truncate">TGB Kamera</span>
           </div>
-          <span className="font-semibold text-slate-900 text-sm">TGB Kamera</span>
-        </div>
-        <button className="text-slate-400 hover:text-slate-600 transition-colors">
-          <PanelLeftClose size={16} />
+        )}
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? "Menüyü Genişlet" : "Menüyü Daralt"}
+          className="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+        >
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
 
@@ -145,9 +172,11 @@ export default function Sidebar() {
       <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-5">
         {sections.map((section) => (
           <div key={section.label}>
-            <p className="px-3 text-[10px] font-semibold text-slate-400 mb-1.5 tracking-widest uppercase">
-              {section.label}
-            </p>
+            {!collapsed && (
+              <p className="px-3 text-[10px] font-semibold text-slate-400 mb-1.5 tracking-widest uppercase">
+                {section.label}
+              </p>
+            )}
             <ul className="space-y-0.5">
               {section.items.map((item) => {
                 const active =
@@ -159,14 +188,17 @@ export default function Sidebar() {
                   <li key={item.name}>
                     <Link
                       href={item.href}
+                      title={collapsed ? item.name : undefined}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        collapsed ? "justify-center" : ""
+                      } ${
                         active
                           ? "bg-blue-50 text-blue-600"
                           : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                       }`}
                     >
                       <item.icon size={15} className="shrink-0" />
-                      <span className="flex-1">{item.name}</span>
+                      {!collapsed && <span className="flex-1">{item.name}</span>}
                     </Link>
                   </li>
                 );
@@ -178,7 +210,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-slate-100 p-3 space-y-1">
-        {kullanici && (
+        {kullanici && !collapsed && (
           <div className="px-3 py-2 mb-1">
             <p className="text-xs font-semibold text-slate-700 truncate">{kullanici.displayName}</p>
             <p className="text-[10px] text-slate-400 truncate">{ROL_ETIKETLERI[kullanici.rol]}</p>
@@ -186,10 +218,13 @@ export default function Sidebar() {
         )}
         <button
           onClick={signOut}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          title={collapsed ? "Çıkış Yap" : undefined}
+          className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors ${
+            collapsed ? "justify-center" : ""
+          }`}
         >
           <LogOut size={15} className="shrink-0" />
-          <span>Çıkış Yap</span>
+          {!collapsed && <span>Çıkış Yap</span>}
         </button>
       </div>
     </aside>

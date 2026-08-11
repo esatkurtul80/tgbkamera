@@ -37,6 +37,7 @@ export interface Kullanici {
   magazaId?: string;
   magazaIdleri?: string[];
   bolgeId?: string;
+  favoriMagazaIdleri?: string[];
   aktif: boolean;
   olusturmaTarihi: Timestamp;
   guncellemeTarihi: Timestamp;

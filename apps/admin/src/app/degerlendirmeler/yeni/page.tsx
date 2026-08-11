@@ -461,11 +461,16 @@ function YeniDegerlendirmeIcerik() {
         tp = h.toplamPuan; mp = h.maxPuan;
       }
       setSenkronBekliyor(true);
-      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp)
+      // Bu raporu şu an kaydeden kameraman olarak işaretlenir — açık bir raporu
+      // başka bir kameraman devam ettirirse üstte onun adı görünsün diye.
+      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp, {
+        id: user!.uid,
+        ad: kullanici?.displayName ?? user!.displayName ?? "",
+      })
         .then(() => setSenkronBekliyor(false))
         .catch(console.error); // Bağlantı kopukken hata verir; `online` deps'e eklendiği için bağlantı gelince tekrar dener.
     }, 800);
-  }, [izlenmeler, degId, adim, seciliForm, soruSnap, online]);
+  }, [izlenmeler, degId, adim, seciliForm, soruSnap, online, user, kullanici]);
 
   useEffect(() => {
     function handler(e: BeforeUnloadEvent) {
@@ -515,7 +520,10 @@ function YeniDegerlendirmeIcerik() {
 
     if (degId) {
       // Kameraman akışı: açık raporu finalize et (durum → 'kapali')
-      await finalizeDegerlendirme(degId, izlenmelerFS, toplamPuan, maxPuan);
+      await finalizeDegerlendirme(degId, izlenmelerFS, toplamPuan, maxPuan, {
+        id: user.uid,
+        ad: kullanici?.displayName ?? user.displayName ?? "",
+      });
       router.push(`/degerlendirmeler/${degId}`);
     } else {
       // Admin / manuel akış: yeni doc oluştur

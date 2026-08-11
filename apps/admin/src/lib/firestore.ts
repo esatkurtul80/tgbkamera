@@ -98,6 +98,16 @@ export async function updateKullanici(
   });
 }
 
+export async function updateKullaniciFavoriMagazalar(
+  id: string,
+  favoriMagazaIdleri: string[]
+): Promise<void> {
+  await updateDoc(doc(db, "users", id), {
+    favoriMagazaIdleri,
+    guncellemeTarihi: serverTimestamp(),
+  });
+}
+
 export async function createKullanici(data: {
   email: string;
   displayName: string;
@@ -460,6 +470,13 @@ export async function getDegerlendirmeler(filters?: {
   return snap.docs.map((d) => toDoc<Degerlendirme>(d));
 }
 
+/** Belirli bir ay/yıl için (tüm kameramanlar, tüm mağazalar) tüm raporları döner. */
+export async function getDegerlendirmelerByAyYil(ay: number, yil: number): Promise<Degerlendirme[]> {
+  const snap = await getDocs(
+    query(collection(db, "degerlendirmeler"), where("ay", "==", ay), where("yil", "==", yil))
+  );
+  return snap.docs.map((d) => toDoc<Degerlendirme>(d));
+}
 
 export async function getDegerlendirme(id: string): Promise<Degerlendirme | null> {
   const snap = await getDoc(doc(db, "degerlendirmeler", id));
@@ -501,6 +518,9 @@ export async function updateDegerlendirme(
     toplamPuan?: number | null;
     maxPuan?: number | null;
     puanGirisTipi?: import("@/types").Degerlendirme["puanGirisTipi"];
+    /** Açık bir raporu devam ettiren kameraman değişirse, "kim izliyor" bilgisini günceller. */
+    kameramanId?: string;
+    kameramanAd?: string;
   }
 ): Promise<void> {
   await updateDoc(doc(db, "degerlendirmeler", id), {
@@ -547,28 +567,46 @@ export async function getAcikDegerlendirmeler(
   );
 }
 
-/** Açık bir raporun izlenmelerini ve puanını gerçek zamanlı günceller. */
+/**
+ * Açık bir raporun izlenmelerini ve puanını gerçek zamanlı günceller.
+ * `kameraman` verilirse (canlı raporlama akışından çağrıldığında), raporu o an
+ * kaydeden kişi olarak kameramanId/Ad de güncellenir — böylece açık bir raporu
+ * başka bir kameraman devam ettirirse üstte onun adı görünür. Admin'in "düzenle"
+ * ekranından yapılan düzeltmelerde bu parametre verilmemeli (kim izlediği değişmez).
+ */
 export async function updateDegerlendirmeIzlenmeler(
   id: string,
   izlenmeler: SoruIzlenme[],
   toplamPuan: number | null,
-  maxPuan: number | null
+  maxPuan: number | null,
+  kameraman?: { id: string; ad: string }
 ): Promise<void> {
   await updateDoc(doc(db, "degerlendirmeler", id), {
-    ...cleanData({ izlenmeler, toplamPuan, maxPuan }),
+    ...cleanData({
+      izlenmeler,
+      toplamPuan,
+      maxPuan,
+      ...(kameraman ? { kameramanId: kameraman.id, kameramanAd: kameraman.ad } : {}),
+    }),
     guncellemeTarihi: serverTimestamp(),
   });
 }
 
-/** Raporu kapatır: izlenmeler + puan kaydeder ve durum'u 'kapali' yapar. */
+/** Raporu kapatır: izlenmeler + puan kaydeder ve durum'u 'kapali' yapar. `kameraman` bkz. updateDegerlendirmeIzlenmeler. */
 export async function finalizeDegerlendirme(
   id: string,
   izlenmeler: SoruIzlenme[],
   toplamPuan: number | null,
-  maxPuan: number | null
+  maxPuan: number | null,
+  kameraman?: { id: string; ad: string }
 ): Promise<void> {
   await updateDoc(doc(db, "degerlendirmeler", id), {
-    ...cleanData({ izlenmeler, toplamPuan, maxPuan }),
+    ...cleanData({
+      izlenmeler,
+      toplamPuan,
+      maxPuan,
+      ...(kameraman ? { kameramanId: kameraman.id, kameramanAd: kameraman.ad } : {}),
+    }),
     durum: "kapali",
     guncellemeTarihi: serverTimestamp(),
   });

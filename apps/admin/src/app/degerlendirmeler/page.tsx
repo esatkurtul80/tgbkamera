@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Plus, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -22,6 +22,11 @@ function KameramanDegerlendirmelerView() {
   const { user } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tarihBaslangic, setTarihBaslangic] = useState("");
+  const [tarihBitis, setTarihBitis] = useState("");
+
+  const [silId, setSilId] = useState<string | null>(null);
+  const [siliyor, setSiliyor] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -37,7 +42,58 @@ function KameramanDegerlendirmelerView() {
     });
   }, [user]);
 
+  async function handleSil() {
+    if (!silId) return;
+    setSiliyor(true);
+    await deleteDegerlendirme(silId);
+    setListe((prev) => prev.filter((d) => d.id !== silId));
+    setSilId(null);
+    setSiliyor(false);
+  }
+
   const acikSayisi = liste.filter((d) => d.durum === "acik").length;
+
+  const filtrelenmisListe = useMemo(() => {
+    if (!tarihBaslangic && !tarihBitis) return liste;
+    return liste.filter((d) => {
+      const t = d.olusturmaTarihi?.toDate?.();
+      if (!t) return false;
+      if (tarihBaslangic && t < new Date(tarihBaslangic)) return false;
+      if (tarihBitis) {
+        const bitis = new Date(tarihBitis);
+        bitis.setHours(23, 59, 59, 999);
+        if (t > bitis) return false;
+      }
+      return true;
+    });
+  }, [liste, tarihBaslangic, tarihBitis]);
+
+  const tarihToolbar = (
+    <div className="flex items-center gap-2 flex-wrap">
+      <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Rapor Oluşturma Tarihi:</label>
+      <input
+        type="date"
+        value={tarihBaslangic}
+        onChange={(e) => setTarihBaslangic(e.target.value)}
+        className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+      />
+      <span className="text-xs text-slate-400">–</span>
+      <input
+        type="date"
+        value={tarihBitis}
+        onChange={(e) => setTarihBitis(e.target.value)}
+        className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+      />
+      {(tarihBaslangic || tarihBitis) && (
+        <button
+          onClick={() => { setTarihBaslangic(""); setTarihBitis(""); }}
+          className="px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+        >
+          Temizle
+        </button>
+      )}
+    </div>
+  );
 
   const columns: DataColumn<Degerlendirme>[] = [
     {
@@ -135,33 +191,52 @@ function KameramanDegerlendirmelerView() {
       key: "aksiyon",
       header: "Aksiyon",
       align: "right",
-      width: "130px",
-      cell: (d) =>
-        d.durum === "acik" ? (
-          <div className="flex items-center justify-end gap-1">
-            <Link
-              href={`/degerlendirmeler/${d.id}`}
-              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
-              title="Ara Raporu Gör"
-            >
-              <Eye size={14} />
-            </Link>
-            <Link
-              href={`/degerlendirmeler/yeni?devam=${d.id}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
-            >
-              <Play size={9} fill="currentColor" /> Devam Et
-            </Link>
-          </div>
-        ) : (
-          <Link
-            href={`/degerlendirmeler/${d.id}`}
-            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
-            title="Raporu Gör"
+      width: "160px",
+      cell: (d) => (
+        <div className="flex items-center justify-end gap-1">
+          {d.durum === "acik" ? (
+            <>
+              <Link
+                href={`/degerlendirmeler/${d.id}`}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+                title="Ara Raporu Gör"
+              >
+                <Eye size={14} />
+              </Link>
+              <Link
+                href={`/degerlendirmeler/yeni?devam=${d.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+              >
+                <Play size={9} fill="currentColor" /> Devam Et
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href={`/degerlendirmeler/${d.id}`}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+                title="Raporu Görüntüle"
+              >
+                <Eye size={14} />
+              </Link>
+              <Link
+                href={`/degerlendirmeler/${d.id}/duzenle`}
+                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex"
+                title="Düzenle"
+              >
+                <Pencil size={14} />
+              </Link>
+            </>
+          )}
+          <button
+            onClick={() => setSilId(d.id)}
+            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Sil"
           >
-            <Eye size={14} />
-          </Link>
-        ),
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -170,7 +245,7 @@ function KameramanDegerlendirmelerView() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Değerlendirmelerim</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{liste.length} rapor</p>
+          <p className="text-sm text-slate-500 mt-0.5">{filtrelenmisListe.length} rapor</p>
         </div>
         {acikSayisi > 0 && (
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
@@ -180,7 +255,7 @@ function KameramanDegerlendirmelerView() {
         )}
       </div>
       <DataTable
-        data={liste}
+        data={filtrelenmisListe}
         columns={columns}
         rowKey={(d) => d.id}
         loading={loading}
@@ -189,7 +264,32 @@ function KameramanDegerlendirmelerView() {
         emptyTitle="Henüz değerlendirme yok"
         emptyDescription="Panelinizdeki mağazalardan personel seçerek yeni bir değerlendirme başlatabilirsiniz."
         defaultPageSize={10}
+        toolbar={tarihToolbar}
       />
+
+      <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Bu değerlendirmeyi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri
+            alınamaz.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setSilId(null)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              İptal
+            </button>
+            <button
+              onClick={handleSil}
+              disabled={siliyor}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
+            >
+              {siliyor ? "Siliniyor..." : "Evet, Sil"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -206,7 +306,7 @@ export default function DegerlendirmelerPage() {
   return <AdminDegerlendirmelerView />;
 }
 
-function AdminDegerlendirmelerView() {
+export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { baslik?: string } = {}) {
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [formlar, setFormlar] = useState<Form[]>([]);
   const [personeller, setPersoneller] = useState<Personel[]>([]);
@@ -584,7 +684,7 @@ function AdminDegerlendirmelerView() {
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Değerlendirmeler</h1>
+          <h1 className="text-xl font-bold text-slate-900">{baslik}</h1>
           <p className="text-sm text-slate-500 mt-0.5">{liste.length} kayıt</p>
         </div>
         <div className="flex items-center gap-3">
