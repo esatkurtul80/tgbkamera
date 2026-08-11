@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
-  Settings, LogOut, Camera, PanelLeftClose, MapIcon, Store, UserCog,
+  LogOut, Camera, PanelLeftClose, MapIcon, Store, UserCog,
   TrendingUp, Plus, BarChart2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,7 +54,6 @@ const adminSections: NavSection[] = [
     label: "SİSTEM",
     items: [
       { name: "Kullanıcılar", href: "/kullanicilar", icon: UserCog },
-      { name: "Ayarlar", href: "/ayarlar", icon: Settings },
     ],
   },
 ];

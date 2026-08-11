@@ -22,7 +22,7 @@ const ADMIN_ROLES: KullaniciRol[] = ["admin", "sirketsahibi", "ust_yonetici"];
 
 const ADMIN_ONLY_PREFIXES = [
   "/bolgeler", "/magazalar", "/kullanicilar",
-  "/formlar", "/bolumler", "/sorular", "/ayarlar",
+  "/formlar", "/bolumler", "/sorular",
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
