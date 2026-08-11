@@ -13,6 +13,13 @@ export const metadata: Metadata = {
   description: "TGB Kamera Yönetim Paneli",
 };
 
+// Tüm sayfalar oturum açmış kullanıcıya göre istemci tarafında render oluyor;
+// statik/uzun ömürlü CDN önbelleği (varsayılan: 1 yıl) her deploy'da eski
+// derlemenin artık var olmayan dosyalarına işaret eden HTML'in önbellekte
+// kalmasına ve bölgeye göre 404'lere yol açıyordu. Dinamik render, her
+// isteğin her zaman güncel derlemeyi almasını garantiler.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr" className={`${geist.variable} ${dmMono.variable}`}>
