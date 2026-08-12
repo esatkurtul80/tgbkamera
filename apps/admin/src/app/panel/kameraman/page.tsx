@@ -87,7 +87,11 @@ export default function KameramanPaneliPage() {
   }
 
   useEffect(() => {
-    if (!user) return;
+    // `kullanici` (Firestore profili, favoriler dahil) `user`'dan bir adım sonra
+    // hazır olur — ikisi de hazır olmadan yüklemeye başlarsak favoriler/mağazalar
+    // geçici olarak boş verilerle set edilip, hangi isteğin geç döneceğine bağlı
+    // olarak bu yanlış boş hâl kalıcı kalabilir (yenilemede favorilerin kaybolması buydu).
+    if (!user || !kullanici) return;
     async function load() {
       setLoading(true);
       try {

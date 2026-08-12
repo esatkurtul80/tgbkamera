@@ -10,7 +10,7 @@ import {
   getFormlar,
   getPersoneller,
   getMagazalar,
-  deleteDegerlendirme,
+  softDeleteDegerlendirme,
 } from "@/lib/firestore";
 import type { Degerlendirme, Form, Personel, Magaza } from "@/types";
 import Link from "next/link";
@@ -19,7 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 // ── Kameraman: yalnızca kendi raporları ──────────────────────────────────────
 
 function KameramanDegerlendirmelerView() {
-  const { user } = useAuth();
+  const { user, kullanici } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
   const [tarihBaslangic, setTarihBaslangic] = useState("");
@@ -43,9 +43,14 @@ function KameramanDegerlendirmelerView() {
   }, [user]);
 
   async function handleSil() {
-    if (!silId) return;
+    if (!silId || !user) return;
+    const hedef = liste.find((d) => d.id === silId);
+    if (!hedef) { setSilId(null); return; }
     setSiliyor(true);
-    await deleteDegerlendirme(silId);
+    await softDeleteDegerlendirme(hedef, {
+      id: user.uid,
+      ad: kullanici?.displayName ?? user.displayName ?? "",
+    });
     setListe((prev) => prev.filter((d) => d.id !== silId));
     setSilId(null);
     setSiliyor(false);
@@ -270,8 +275,8 @@ function KameramanDegerlendirmelerView() {
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Bu değerlendirmeyi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri
-            alınamaz.
+            Bu değerlendirme çöp kutusuna taşınacak. 30 gün boyunca çöp kutusundan geri
+            getirilebilir, süre dolunca kalıcı olarak silinir.
           </p>
           <div className="flex items-center justify-end gap-2">
             <button
@@ -307,6 +312,7 @@ export default function DegerlendirmelerPage() {
 }
 
 export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { baslik?: string } = {}) {
+  const { user, kullanici } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [formlar, setFormlar] = useState<Form[]>([]);
   const [personeller, setPersoneller] = useState<Personel[]>([]);
@@ -401,9 +407,14 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
   }
 
   async function handleSil() {
-    if (!silId) return;
+    if (!silId || !user) return;
+    const hedef = liste.find((d) => d.id === silId);
+    if (!hedef) { setSilId(null); return; }
     setSiliyor(true);
-    await deleteDegerlendirme(silId);
+    await softDeleteDegerlendirme(hedef, {
+      id: user.uid,
+      ad: kullanici?.displayName ?? user.displayName ?? "",
+    });
     setListe((prev) => prev.filter((d) => d.id !== silId));
     setSecilenler((prev) => {
       if (!prev.has(silId)) return prev;
@@ -745,8 +756,8 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Bu değerlendirmeyi kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri
-            alınamaz.
+            Bu değerlendirme çöp kutusuna taşınacak. 30 gün boyunca çöp kutusundan geri
+            getirilebilir, süre dolunca kalıcı olarak silinir.
           </p>
           <div className="flex items-center justify-end gap-2">
             <button

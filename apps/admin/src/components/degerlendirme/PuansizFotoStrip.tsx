@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, Plus, RotateCw } from "lucide-react";
-import Modal from "@/components/ui/Modal";
 
 export interface PuansizFoto {
   /** Zaten yüklenmiş bir fotoğraf için Storage URL'i, henüz yüklenmemiş bir seçim için objectURL önizlemesi. */
@@ -22,6 +21,15 @@ interface PuansizFotoStripProps {
 export default function PuansizFotoStrip({ fotograflar, onEkle, readOnly = false }: PuansizFotoStripProps) {
   const [buyukGoster, setBuyukGoster] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!buyukGoster) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setBuyukGoster(null);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [buyukGoster]);
 
   if (fotograflar.length === 0 && readOnly) return null;
 
@@ -85,12 +93,27 @@ export default function PuansizFotoStrip({ fotograflar, onEkle, readOnly = false
         )}
       </div>
 
-      <Modal open={!!buyukGoster} onClose={() => setBuyukGoster(null)} title="Fotoğraf" size="lg">
-        {buyukGoster && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={buyukGoster} alt="" className="w-full h-auto rounded-lg" />
-        )}
-      </Modal>
+      {buyukGoster && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setBuyukGoster(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setBuyukGoster(null)}
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+          >
+            <X size={22} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={buyukGoster}
+            alt=""
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }

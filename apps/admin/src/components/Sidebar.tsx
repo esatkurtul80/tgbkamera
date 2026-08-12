@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
   LogOut, Camera, PanelLeftClose, PanelLeftOpen, MapIcon, Store, UserCog,
-  TrendingUp, Plus, BarChart2,
+  TrendingUp, Plus, BarChart2, Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { KullaniciRol } from "@/types";
@@ -49,6 +49,7 @@ const adminSections: NavSection[] = [
     items: [
       { name: "Değerlendirmeler", href: "/degerlendirmeler", icon: ClipboardList },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
+      { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
   },
   {
@@ -76,6 +77,7 @@ const bolgeMuduruSections: NavSection[] = [
     items: [
       { name: "Değerlendirmeler", href: "/degerlendirmeler", icon: ClipboardList },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
+      { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
   },
 ];
@@ -94,6 +96,7 @@ const magazaSorumlusuSections: NavSection[] = [
     items: [
       { name: "Değerlendirmeler", href: "/degerlendirmeler", icon: ClipboardList },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
+      { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
   },
 ];
@@ -111,6 +114,7 @@ const kameramanSections: NavSection[] = [
     items: [
       { name: "Değerlendirmelerim", href: "/degerlendirmeler", icon: TrendingUp },
       { name: "Tüm Değerlendirmeler", href: "/tum-degerlendirmeler", icon: ClipboardList },
+      { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
   },
 ];

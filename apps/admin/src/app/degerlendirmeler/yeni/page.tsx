@@ -89,7 +89,10 @@ function CevapCell({ cevap, onSet }: { cevap: CevapSecenegi | undefined; onSet(c
 
 /* ─── SaatInput — tam manuel metin girişi ───────────────────────────────────── */
 function SaatInput({ izId, tarih, onCommit }: { izId: string; tarih: Date; onCommit(id: string, saat: string): void }) {
-  const initial = `${String(tarih.getHours()).padStart(2,"0")}:${String(tarih.getMinutes()).padStart(2,"0")}`;
+  // Saat henüz girilmemişse (varsayılan 00:00 sentinel) alan boş görünür,
+  // "00:00" sadece soluk placeholder olarak durur — gerçek bir değer gibi görünmesin.
+  const bosMu = tarih.getHours() === 0 && tarih.getMinutes() === 0;
+  const initial = bosMu ? "" : `${String(tarih.getHours()).padStart(2,"0")}:${String(tarih.getMinutes()).padStart(2,"0")}`;
   const [val, setVal] = useState(initial);
 
   function normalize(raw: string) {
@@ -104,16 +107,17 @@ function SaatInput({ izId, tarih, onCommit }: { izId: string; tarih: Date; onCom
     <input
       type="text"
       inputMode="numeric"
-      placeholder="09:00"
+      placeholder="00:00"
       value={val}
       onChange={e => setVal(e.target.value)}
       onBlur={() => {
+        if (val.trim() === "") return; // saat girilmedi, placeholder olarak kalsın
         const normalized = normalize(val);
         setVal(normalized);
         onCommit(izId, normalized);
       }}
       onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-      className="w-[30px] text-[10px] font-bold text-slate-500 bg-transparent border-none outline-none p-0 text-center focus:ring-0 focus:text-indigo-600 transition-colors"
+      className="w-[30px] text-[10px] font-bold text-slate-500 bg-transparent border-none outline-none p-0 text-center placeholder:text-slate-300 placeholder:font-normal focus:ring-0 focus:text-indigo-600 transition-colors"
     />
   );
 }
@@ -401,16 +405,17 @@ function YeniDegerlendirmeIcerik() {
   const gunlukMap = useMemo(() => {
     const map = new Map<number, IzlenmeLocal[]>();
     for (let g = 1; g <= gunSayisi; g++) map.set(g, []);
+    // Sütun sırası eklenme sırasıdır (saat elle girildiği için zamana göre
+    // sıralarsak yeni eklenen sütun ortaya/sola kayabilir — hep sağda açılmalı).
     for (const iz of izlenmeler)
       if (iz.tarih.getMonth() === seciliAy && iz.tarih.getFullYear() === seciliYil)
         map.get(iz.tarih.getDate())?.push(iz);
-    for (const [g, list] of map.entries())
-      map.set(g, [...list].sort((a, b) => a.tarih.getTime() - b.tarih.getTime()));
     return map;
   }, [izlenmeler, seciliAy, seciliYil, gunSayisi]);
 
   function izlenmeEkle(gun: number) {
-    const t = new Date(seciliYil, seciliAy, gun, now.getHours(), now.getMinutes());
+    // Saat kasıtlı olarak 00:00 — kullanıcı gerçek saati kendi yazsın, "şu an"ki saat otomatik gelmesin.
+    const t = new Date(seciliYil, seciliAy, gun, 0, 0);
     setIzlenmeler(p => [...p, {
       id: crypto.randomUUID(), tarih: t, cevaplar: {},
       kaydedenId: user?.uid, kaydedenAd: kullanici?.displayName ?? user?.displayName ?? "",
@@ -750,9 +755,10 @@ function YeniDegerlendirmeIcerik() {
                 );
               })}
 
-              {/* Sağ Sabit Sütun Başlığı */}
+              {/* Sağ Sabit Sütun Başlığı — dar/bölünmüş ekranda (ör. kamera izleme yanında)
+                  işaretlemeye yer açmak için sadece geniş (xl+) ekranlarda gösterilir */}
               <th rowSpan={2}
-                className="sticky right-0 z-40 bg-slate-50 border-b border-l border-slate-200 p-3 shadow-[-4px_0_10px_-2px_rgba(0,0,0,0.05)] text-center align-middle"
+                className="hidden xl:table-cell sticky right-0 z-40 bg-slate-50 border-b border-l border-slate-200 p-3 shadow-[-4px_0_10px_-2px_rgba(0,0,0,0.05)] text-center align-middle"
                 style={{ width: 240, minWidth: 240, maxWidth: 240 }}>
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-center">İSTATİSTİK ÖZET</span>
               </th>
@@ -870,8 +876,8 @@ function YeniDegerlendirmeIcerik() {
                         return cells;
                       })}
 
-                      {/* Sağ Sabit Sütun Gövdesi */}
-                      <td className="sticky right-0 z-20 p-3 bg-blue-50/80 shadow-[-4px_0_10px_-2px_rgba(0,0,0,0.05)] border-l border-b border-blue-100 backdrop-blur-sm"
+                      {/* Sağ Sabit Sütun Gövdesi — bkz. yukarıdaki başlık notu */}
+                      <td className="hidden xl:table-cell sticky right-0 z-20 p-3 bg-blue-50/80 shadow-[-4px_0_10px_-2px_rgba(0,0,0,0.05)] border-l border-b border-blue-100 backdrop-blur-sm"
                         style={{ width: 240, minWidth: 240, maxWidth: 240 }}>
                         {sonuc && sonuc.toplamIzlenme > 0 ? (
                           <div className="flex flex-col gap-2 w-full animate-in fade-in duration-300">

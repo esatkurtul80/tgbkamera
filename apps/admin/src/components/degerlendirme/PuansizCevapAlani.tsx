@@ -172,5 +172,14 @@ export function PuansizCevapGoster({ tip, cevap }: PuansizCevapGosterProps) {
       : cevap?.yorum;
 
   if (!deger) return <span className="text-slate-300 text-sm">—</span>;
+
+  if (tip === "yorum") {
+    return (
+      <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg px-3 py-2.5 leading-relaxed">
+        {deger}
+      </p>
+    );
+  }
+
   return <span className="text-sm text-slate-700 whitespace-pre-wrap">{deger}</span>;
 }

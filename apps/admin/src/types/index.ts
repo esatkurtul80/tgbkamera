@@ -186,3 +186,15 @@ export interface Degerlendirme {
   puansizCevaplar?: Record<string, PuansizCevapDegeri>;
 }
 
+/** Silinen bir değerlendirmenin çöp kutusundaki hâli — 30 gün saklanır, sonra otomatik (Firestore TTL) silinir. */
+export interface CopKutusuKaydi extends Omit<Degerlendirme, "id"> {
+  id: string;
+  /** Orijinal değerlendirme dokümanının ID'si — geri getirilince aynı ID ile eski hâline döner. */
+  orijinalId: string;
+  silinmeTarihi: Timestamp;
+  silenKullaniciId: string;
+  silenKullaniciAd: string;
+  /** Firestore TTL politikası bu alana göre çalışır — silinmeTarihi + 30 gün. */
+  otomatikSilinmeTarihi: Timestamp;
+}
+

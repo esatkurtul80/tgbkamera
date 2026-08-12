@@ -7,6 +7,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -28,6 +29,7 @@ import type {
   Kullanici,
   Bolge,
   Magaza,
+  CopKutusuKaydi,
   KullaniciRol,
   SkorlamaSistemi,
   SoruTipi,
@@ -496,8 +498,57 @@ export async function createDegerlendirme(
 }
 
 
-export async function deleteDegerlendirme(id: string): Promise<void> {
-  await deleteDoc(doc(db, "degerlendirmeler", id));
+const COP_KUTUSU_SAKLAMA_GUN = 30;
+
+/**
+ * Bir değerlendirmeyi kalıcı silmek yerine ortak çöp kutusuna taşır — herkes (kameramanlar
+ * ve admin) aynı çöp kutusunu görür ve 30 gün içinde geri getirebilir. 30 gün dolunca
+ * Firestore TTL politikası (otomatikSilinmeTarihi alanına göre) dokümanı otomatik siler.
+ */
+export async function softDeleteDegerlendirme(
+  deg: Degerlendirme,
+  silen: { id: string; ad: string }
+): Promise<void> {
+  const simdi = Timestamp.now();
+  const otomatikSilinmeTarihi = Timestamp.fromMillis(
+    simdi.toMillis() + COP_KUTUSU_SAKLAMA_GUN * 24 * 60 * 60 * 1000
+  );
+  const { id, ...veri } = deg;
+  const batch = writeBatch(db);
+  batch.set(doc(db, "cop_kutusu", id), {
+    ...cleanData(veri),
+    orijinalId: id,
+    silinmeTarihi: simdi,
+    silenKullaniciId: silen.id,
+    silenKullaniciAd: silen.ad,
+    otomatikSilinmeTarihi,
+  });
+  batch.delete(doc(db, "degerlendirmeler", id));
+  await batch.commit();
+}
+
+/** Ortak çöp kutusundaki tüm kayıtları (en son silinen önce) döner. */
+export async function getCopKutusu(): Promise<CopKutusuKaydi[]> {
+  const snap = await getDocs(query(collection(db, "cop_kutusu"), orderBy("silinmeTarihi", "desc")));
+  return snap.docs.map((d) => toDoc<CopKutusuKaydi>(d));
+}
+
+/** Çöp kutusundaki bir kaydı aynı ID ile değerlendirmelere geri taşır. */
+export async function restoreDegerlendirmeFromCopKutusu(id: string): Promise<void> {
+  const snap = await getDoc(doc(db, "cop_kutusu", id));
+  if (!snap.exists()) return;
+  const {
+    orijinalId: _orijinalId,
+    silinmeTarihi: _silinmeTarihi,
+    silenKullaniciId: _silenKullaniciId,
+    silenKullaniciAd: _silenKullaniciAd,
+    otomatikSilinmeTarihi: _otomatikSilinmeTarihi,
+    ...degData
+  } = snap.data() as Record<string, unknown>;
+  const batch = writeBatch(db);
+  batch.set(doc(db, "degerlendirmeler", id), degData);
+  batch.delete(doc(db, "cop_kutusu", id));
+  await batch.commit();
 }
 
 export async function updateDegerlendirme(

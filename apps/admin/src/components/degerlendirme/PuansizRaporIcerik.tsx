@@ -83,27 +83,31 @@ const PuansizRaporIcerik = forwardRef<HTMLDivElement, PuansizRaporIcerikProps>(
                     const cevap = d.puansizCevaplar?.[soruId];
                     return (
                       <div key={soruId} className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-slate-100 text-slate-400 text-[11px] font-bold">
+                        <div className="flex items-start gap-3">
+                          <div className="w-6 h-6 mt-0.5 rounded-full flex items-center justify-center shrink-0 bg-slate-100 text-slate-400 text-[11px] font-bold">
                             {i + 1}
                           </div>
-                          <p className="flex-1 text-sm text-slate-700">{soru?.metin}</p>
-                          <PuansizCevapGoster tip={tip} cevap={cevap} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-700">{soru?.metin}</p>
+                            <div className="mt-2">
+                              <PuansizCevapGoster tip={tip} cevap={cevap} />
+                            </div>
+                            {(cevap?.fotograflar?.length ?? 0) > 0 && (
+                              <div className="mt-2.5">
+                                <PuansizFotoStrip
+                                  fotograflar={(cevap!.fotograflar ?? []).map((url) => ({ url }))}
+                                  readOnly
+                                />
+                              </div>
+                            )}
+                            {tip !== "yorum" && cevap?.yorum && (
+                              <div className="mt-2.5 flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                                <StickyNote size={13} className="mt-0.5 shrink-0 text-slate-400" />
+                                <span className="whitespace-pre-wrap">{cevap.yorum}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {(cevap?.fotograflar?.length ?? 0) > 0 && (
-                          <div className="mt-2.5 ml-9">
-                            <PuansizFotoStrip
-                              fotograflar={(cevap!.fotograflar ?? []).map((url) => ({ url }))}
-                              readOnly
-                            />
-                          </div>
-                        )}
-                        {tip !== "yorum" && cevap?.yorum && (
-                          <div className="mt-2.5 ml-9 flex items-start gap-1.5 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
-                            <StickyNote size={13} className="mt-0.5 shrink-0 text-slate-400" />
-                            <span className="whitespace-pre-wrap">{cevap.yorum}</span>
-                          </div>
-                        )}
                       </div>
                     );
                   })}
