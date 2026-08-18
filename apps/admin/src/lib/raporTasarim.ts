@@ -11,7 +11,9 @@ export interface RaporFontlari {
   kunye: string;
   /** Puan panelindeki büyük sayı */
   puan: string;
-  /** Bölüm başlıkları ve soru metinleri */
+  /** Bölüm başlıkları ("01 BÖLÜM ADI" satırları) */
+  bolumBaslik: string;
+  /** Soru metinleri (kart başlıkları) */
   soruBaslik: string;
   /** Cevap, yorum ve not metinleri */
   metin: string;
@@ -24,6 +26,7 @@ export interface RaporFontBoyutlari {
   baslik: number;
   kunye: number;
   puan: number;
+  bolumBaslik: number;
   soruBaslik: number;
   metin: number;
 }
@@ -61,6 +64,7 @@ export const VARSAYILAN_RAPOR_FONTLARI: RaporFontlari = {
   baslik: "playfair",
   kunye: "archivo",
   puan: "playfair",
+  bolumBaslik: "archivo",
   soruBaslik: "archivo",
   metin: "archivo",
 };
@@ -71,6 +75,7 @@ export const VARSAYILAN_RAPOR_BOYUTLARI: RaporFontBoyutlari = {
   baslik: 27,
   kunye: 13,
   puan: 42,
+  bolumBaslik: 13,
   soruBaslik: 13,
   metin: 12.5,
 };
@@ -93,10 +98,20 @@ export function fontCss(key: string): string {
 
 /** Kayıtlı (kısmi) ayarı varsayılanlarla birleştirir. */
 export function tasarimBirlestir(kayitli: Partial<RaporTasarimAyarlari> | null): RaporTasarimAyarlari {
+  const fontlar = { ...VARSAYILAN_RAPOR_FONTLARI, ...(kayitli?.fontlar ?? {}) };
+  const boyutlar = { ...VARSAYILAN_RAPOR_BOYUTLARI, ...(kayitli?.boyutlar ?? {}) };
+  // Geriye uyumluluk: bölüm/soru başlıkları eskiden tek "soruBaslik" rolündeydi —
+  // eski kayıtlarda bölüm başlığı, kayıtlı soru başlığı ayarını devralır.
+  if (kayitli?.fontlar?.soruBaslik && !kayitli.fontlar.bolumBaslik) {
+    fontlar.bolumBaslik = kayitli.fontlar.soruBaslik;
+  }
+  if (kayitli?.boyutlar?.soruBaslik && !kayitli.boyutlar.bolumBaslik) {
+    boyutlar.bolumBaslik = kayitli.boyutlar.soruBaslik;
+  }
   return {
     logoUrl: kayitli?.logoUrl,
-    fontlar: { ...VARSAYILAN_RAPOR_FONTLARI, ...(kayitli?.fontlar ?? {}) },
-    boyutlar: { ...VARSAYILAN_RAPOR_BOYUTLARI, ...(kayitli?.boyutlar ?? {}) },
+    fontlar,
+    boyutlar,
     harfAraliklar: { ...VARSAYILAN_RAPOR_HARF_ARALIKLARI, ...(kayitli?.harfAraliklar ?? {}) },
   };
 }

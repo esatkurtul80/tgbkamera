@@ -4,19 +4,18 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas-pro";
 import {
   pdfRaporBloklariOlustur,
-  PdfSayfa,
-  PDF_ICERIK_GENISLIK,
-  PDF_ICERIK_KAPASITE,
+  PdfTekSayfa,
   PDF_SAYFA_GENISLIK,
   RAPOR_RENK,
-  type PdfBlok,
 } from "@/components/degerlendirme/PdfRapor";
 import { getRaporTasarim } from "@/lib/firestore";
 import { tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import type { Degerlendirme, PuansizCevapDegeri } from "@/types";
 
 const A4_GENISLIK_MM = 210;
-const A4_YUKSEKLIK_MM = 297;
+const PX_TO_MM = A4_GENISLIK_MM / PDF_SAYFA_GENISLIK;
+/** Tarayıcı canvas boyut sınırına takılmamak için üst sınır (px). */
+const MAX_CANVAS_KENARI = 30000;
 
 function dosyaAdiTemizle(s: string): string {
   return s.replace(/[\\/:*?"<>|]+/g, " ").trim();
@@ -59,36 +58,8 @@ function ikiFrameBekle(): Promise<void> {
 }
 
 /**
- * Blokları A4 sayfalarına dağıtır: hiçbir blok ortadan bölünmez; rapor ve bölüm
- * başlıkları, altındaki ilk satırla birlikte sığmıyorsa yeni sayfaya taşınır
- * (sayfa sonunda yalnız kalmış başlık olmaz).
- */
-function sayfalaraDagit(bloklar: PdfBlok[], yukseklikler: number[]): number[][] {
-  const sayfalar: number[][] = [];
-  let aktif: number[] = [];
-  let doluluk = 0;
-
-  for (let i = 0; i < bloklar.length; i++) {
-    const h = yukseklikler[i];
-    const baslikTuru = bloklar[i].tur === "baslik" || bloklar[i].tur === "bolum";
-    const gerekli = baslikTuru && i + 1 < bloklar.length ? h + yukseklikler[i + 1] : h;
-
-    if (aktif.length > 0 && doluluk + gerekli > PDF_ICERIK_KAPASITE) {
-      sayfalar.push(aktif);
-      aktif = [];
-      doluluk = 0;
-    }
-    aktif.push(i);
-    doluluk += h;
-  }
-  if (aktif.length > 0) sayfalar.push(aktif);
-  return sayfalar;
-}
-
-/**
- * Puansız (tek seferlik) bir değerlendirmeyi profesyonel rapor düzeninde
- * (antet, künye, sayfa numarası; satırlar sayfa sonunda bölünmeden) çok
- * sayfalı PDF olarak indirir.
+ * Puansız (tek seferlik) bir değerlendirmeyi, içerik kadar aşağı uzayan
+ * TEK sayfalık PDF olarak indirir (genişlik A4, yükseklik özel — sayfa bölme yok).
  */
 export async function degerlendirmePdfIndir(d: Degerlendirme): Promise<void> {
   const guvenli = pdfGuvenliKopya(d);
@@ -116,65 +87,46 @@ export async function degerlendirmePdfIndir(d: Degerlendirme): Promise<void> {
   const root = createRoot(container);
 
   try {
-    // 1) Ölçüm: tüm blokları içerik genişliğinde çiz, tek tek yüksekliklerini al.
-    flushSync(() => {
-      root.render(
-        <div style={{ width: PDF_ICERIK_GENISLIK, background: RAPOR_RENK.kagit }}>
-          {bloklar.map((b, i) => (
-            <div key={i} data-olcum-blok>
-              {b.el}
-            </div>
-          ))}
-        </div>
-      );
-    });
-    await gorsellerYuklenmesiniBekle(container);
-    await ikiFrameBekle();
-
-    const yukseklikler = Array.from(container.querySelectorAll("[data-olcum-blok]")).map(
-      (el) => el.getBoundingClientRect().height
-    );
-
-    // 2) Blokları sayfalara dağıt.
-    const sayfalar = sayfalaraDagit(bloklar, yukseklikler);
-
-    // 3) Sayfaları gerçek A4 çerçevesinde (antet + altbilgi) yeniden çiz.
     const altBilgiTarih = new Date().toLocaleDateString("tr-TR", {
       day: "2-digit", month: "2-digit", year: "numeric",
     });
 
     flushSync(() => {
       root.render(
-        <div style={{ width: PDF_SAYFA_GENISLIK }}>
-          {sayfalar.map((blokIdxleri, s) => (
-            <PdfSayfa key={s} sayfaNo={s + 1} toplamSayfa={sayfalar.length} altBilgiTarih={altBilgiTarih}>
-              {blokIdxleri.map((i) => (
-                <div key={i}>{bloklar[i].el}</div>
-              ))}
-            </PdfSayfa>
+        <PdfTekSayfa altBilgiTarih={altBilgiTarih}>
+          {bloklar.map((b, i) => (
+            <div key={i}>{b.el}</div>
           ))}
-        </div>
+        </PdfTekSayfa>
       );
     });
     await gorsellerYuklenmesiniBekle(container);
     await ikiFrameBekle();
 
-    // 4) Her sayfayı ayrı ayrı yakala ve PDF'e bas.
-    const sayfaElleri = Array.from(container.querySelectorAll<HTMLElement>("[data-pdf-sayfa]"));
-    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    const sayfaEl = container.querySelector<HTMLElement>("[data-pdf-sayfa]");
+    if (!sayfaEl) throw new Error("Rapor sayfası oluşturulamadı.");
+    const yukseklikPx = sayfaEl.getBoundingClientRect().height;
 
-    for (let i = 0; i < sayfaElleri.length; i++) {
-      const canvas = await html2canvas(sayfaElleri[i], {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: RAPOR_RENK.kagit,
-        windowWidth: PDF_SAYFA_GENISLIK,
-      });
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      if (i > 0) pdf.addPage("a4", "portrait");
-      pdf.addImage(imgData, "JPEG", 0, 0, A4_GENISLIK_MM, A4_YUKSEKLIK_MM);
-    }
+    // Normalde 2x çözünürlük; çok uzun raporlarda canvas sınırına sığacak şekilde düşür.
+    const olcek = Math.min(2, MAX_CANVAS_KENARI / yukseklikPx);
+
+    const canvas = await html2canvas(sayfaEl, {
+      scale: olcek,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: RAPOR_RENK.kagit,
+      windowWidth: PDF_SAYFA_GENISLIK,
+    });
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const yukseklikMm = +(yukseklikPx * PX_TO_MM).toFixed(2);
+
+    const pdf = new jsPDF({
+      unit: "mm",
+      format: [A4_GENISLIK_MM, yukseklikMm],
+      orientation: "portrait",
+    });
+    pdf.addImage(imgData, "JPEG", 0, 0, A4_GENISLIK_MM, yukseklikMm);
 
     const tarihEtiketi = d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR").replace(/\./g, "-") ?? "";
     const dosyaAdi = `${dosyaAdiTemizle(d.personelAd)} - ${dosyaAdiTemizle(d.formAd)}${tarihEtiketi ? ` - ${tarihEtiketi}` : ""}.pdf`;

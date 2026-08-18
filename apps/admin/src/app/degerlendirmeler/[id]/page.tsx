@@ -221,7 +221,7 @@ export default function DegerlendirmeRaporPage() {
                     style={{ background: RAPOR_RENK.accent, color: "#ffffff", borderRight: `1px solid ${KOYU_ACCENT}` }}
                     rowSpan={2}
                   >
-                    <div className="text-base" style={{ fontFamily: fontCss(tasarim.fontlar.soruBaslik), letterSpacing: "0.04em" }}>
+                    <div className="text-base" style={{ fontFamily: fontCss(tasarim.fontlar.bolumBaslik), letterSpacing: "0.04em" }}>
                       {d.personelAd.toUpperCase()}
                     </div>
                     <div className="text-xs font-normal opacity-70 mt-0.5">{d.magazaAd}</div>
@@ -271,7 +271,7 @@ export default function DegerlendirmeRaporPage() {
                             color: RAPOR_RENK.accent,
                             borderRight: `1px solid ${RAPOR_RENK.line}`,
                             letterSpacing: "0.08em",
-                            fontFamily: fontCss(tasarim.fontlar.soruBaslik),
+                            fontFamily: fontCss(tasarim.fontlar.bolumBaslik),
                           }}
                         >
                           {bolum.ad}
@@ -386,7 +386,7 @@ export default function DegerlendirmeRaporPage() {
                 <div className="px-5 py-3" style={{ background: RAPOR_RENK.metaBg, borderBottom: `1px solid ${RAPOR_RENK.line}` }}>
                   <p
                     className="text-sm font-bold uppercase m-0"
-                    style={{ color: RAPOR_RENK.accent, letterSpacing: "0.06em", fontFamily: fontCss(tasarim.fontlar.soruBaslik) }}
+                    style={{ color: RAPOR_RENK.accent, letterSpacing: "0.06em", fontFamily: fontCss(tasarim.fontlar.bolumBaslik) }}
                   >
                     {bolum.ad}
                   </p>

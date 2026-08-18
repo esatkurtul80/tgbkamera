@@ -29,7 +29,8 @@ const FONT_ROLLERI: { key: keyof RaporFontlari; etiket: string }[] = [
   { key: "baslik", etiket: "Rapor Başlığı" },
   { key: "kunye", etiket: "Künye Bilgileri" },
   { key: "puan", etiket: "Puan" },
-  { key: "soruBaslik", etiket: "Bölüm ve Soru Başlıkları" },
+  { key: "bolumBaslik", etiket: "Bölüm Başlıkları" },
+  { key: "soruBaslik", etiket: "Soru Başlıkları" },
   { key: "metin", etiket: "Cevap ve Yorum Metinleri" },
 ];
 

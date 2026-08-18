@@ -12,9 +12,6 @@ export const PDF_SAYFA_GENISLIK = 794;
 export const PDF_SAYFA_YUKSEKLIK = 1123;
 const KENAR_BOSLUK = 48;
 const UST_BOSLUK = 40;
-const ALT_BOSLUK = 64; // altbilgi şeridi dahil
-export const PDF_ICERIK_GENISLIK = PDF_SAYFA_GENISLIK - KENAR_BOSLUK * 2;
-export const PDF_ICERIK_KAPASITE = PDF_SAYFA_YUKSEKLIK - UST_BOSLUK - ALT_BOSLUK;
 
 /* ─── Tasarım paleti (bordo/krem) ─────────────────────────────────────────── */
 export const RAPOR_RENK = {
@@ -209,8 +206,8 @@ function RaporBaslik({ d, tasarim }: { d: Degerlendirme; tasarim: RaporTasarimAy
   );
 }
 
-function BolumBaslik({ sira, ad, cevaplanan, toplam, soruBaslikFont, boyut }: {
-  sira: number; ad: string; cevaplanan: number; toplam: number; soruBaslikFont: string; boyut: number;
+function BolumBaslik({ sira, ad, cevaplanan, toplam, bolumBaslikFont, boyut }: {
+  sira: number; ad: string; cevaplanan: number; toplam: number; bolumBaslikFont: string; boyut: number;
 }) {
   return (
     <div className="pt-3 pb-4">
@@ -224,7 +221,7 @@ function BolumBaslik({ sira, ad, cevaplanan, toplam, soruBaslikFont, boyut }: {
           </span>
           <span
             className="font-bold uppercase"
-            style={{ color: RAPOR_RENK.ink, letterSpacing: "0.04em", fontFamily: soruBaslikFont, fontSize: boyut }}
+            style={{ color: RAPOR_RENK.ink, letterSpacing: "0.04em", fontFamily: bolumBaslikFont, fontSize: boyut }}
           >
             {ad}
           </span>
@@ -341,7 +338,7 @@ function FotoBlok({ url }: { url: string }) {
  */
 export function pdfRaporBloklariOlustur(d: Degerlendirme, tasarim: RaporTasarimAyarlari): PdfBlok[] {
   const bloklar: PdfBlok[] = [{ tur: "baslik", el: <RaporBaslik d={d} tasarim={tasarim} /> }];
-  const soruBaslikFont = fontCss(tasarim.fontlar.soruBaslik);
+  const bolumBaslikFont = fontCss(tasarim.fontlar.bolumBaslik);
 
   Object.keys(d.bolumSnapshot).forEach((bolumId, bolumIdx) => {
     const bolum = d.bolumSnapshot[bolumId];
@@ -358,8 +355,8 @@ export function pdfRaporBloklariOlustur(d: Degerlendirme, tasarim: RaporTasarimA
           ad={bolum.ad}
           cevaplanan={cevaplanan}
           toplam={bolum.soruIdleri.length}
-          soruBaslikFont={soruBaslikFont}
-          boyut={tasarim.boyutlar.soruBaslik}
+          bolumBaslikFont={bolumBaslikFont}
+          boyut={tasarim.boyutlar.bolumBaslik}
         />
       ),
     });
@@ -380,44 +377,37 @@ export function pdfRaporBloklariOlustur(d: Degerlendirme, tasarim: RaporTasarimA
 
 /* ─── Sayfa çerçevesi ─────────────────────────────────────────────────────── */
 
-interface PdfSayfaProps {
-  sayfaNo: number;
-  toplamSayfa: number;
+interface PdfTekSayfaProps {
   altBilgiTarih: string;
   children: React.ReactNode;
 }
 
-/** Tam A4 boyutunda, altbilgili tek rapor sayfası. */
-export function PdfSayfa({ sayfaNo, toplamSayfa, altBilgiTarih, children }: PdfSayfaProps) {
+/** Tek parça, aşağı doğru içerik kadar uzayan rapor sayfası (genişlik A4, en az A4 boyu).
+ *  PDF çıktısı bu tek sayfanın tamamını özel boyutlu tek PDF sayfası olarak basar. */
+export function PdfTekSayfa({ altBilgiTarih, children }: PdfTekSayfaProps) {
   return (
     <div
       data-pdf-sayfa
-      className="relative"
+      className="flex flex-col"
       style={{
         width: PDF_SAYFA_GENISLIK,
-        height: PDF_SAYFA_YUKSEKLIK,
-        padding: `${UST_BOSLUK}px ${KENAR_BOSLUK}px ${ALT_BOSLUK}px`,
+        minHeight: PDF_SAYFA_YUKSEKLIK,
+        padding: `${UST_BOSLUK}px ${KENAR_BOSLUK}px 22px`,
         background: RAPOR_RENK.kagit,
         color: RAPOR_RENK.ink,
       }}
     >
-      {children}
+      <div className="flex-1">{children}</div>
 
       <div
-        className="absolute flex items-center justify-between pt-2.5"
-        style={{
-          left: KENAR_BOSLUK,
-          right: KENAR_BOSLUK,
-          bottom: 22,
-          borderTop: `1px solid ${RAPOR_RENK.line}`,
-          fontFamily: MONO,
-        }}
+        className="flex items-center justify-between pt-2.5 mt-3"
+        style={{ borderTop: `1px solid ${RAPOR_RENK.line}`, fontFamily: MONO }}
       >
         <p className="text-[9px] m-0" style={{ color: RAPOR_RENK.faint }}>
           TUĞBA KURUYEMİŞ · DEĞERLENDİRME RAPORU · {altBilgiTarih}
         </p>
         <p className="text-[9px] font-semibold m-0" style={{ color: RAPOR_RENK.faint }}>
-          SAYFA {sayfaNo} / {toplamSayfa}
+          SAYFA 1 / 1
         </p>
       </div>
     </div>
