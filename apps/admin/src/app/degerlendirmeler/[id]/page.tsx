@@ -3,30 +3,48 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Camera, CheckCircle2, XCircle, MinusCircle, Target, User, Store, Calendar, FileSpreadsheet, FileDown } from "lucide-react";
-import Badge from "@/components/ui/Badge";
-import { getDegerlendirme } from "@/lib/firestore";
+import { CheckCircle2, XCircle, MinusCircle, Target, FileSpreadsheet, FileDown } from "lucide-react";
+import { getDegerlendirme, getRaporTasarim } from "@/lib/firestore";
 import { soruPuanHesapla } from "@/lib/skorlama";
-import PuansizRaporIcerik from "@/components/degerlendirme/PuansizRaporIcerik";
+import {
+  pdfRaporBloklariOlustur,
+  RaporBant,
+  RaporMetaAlan,
+  PDF_SAYFA_GENISLIK,
+  RAPOR_RENK,
+  RAPOR_MONO,
+} from "@/components/degerlendirme/PdfRapor";
+import { fontCss, tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import type { Degerlendirme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 
 const CEVAP_CONFIG = {
-  evet:  { label: "EVET",  bg: "bg-emerald-500", text: "text-white" },
-  hayir: { label: "HAYIR", bg: "bg-red-500",     text: "text-white" },
-  muaf:  { label: "MUAF",  bg: "bg-slate-300",   text: "text-slate-700" },
+  evet:  { label: "EVET",  bg: "#047857", renk: "#ffffff" },
+  hayir: { label: "HAYIR", bg: "#be123c", renk: "#ffffff" },
+  muaf:  { label: "MUAF",  bg: "#e7e5e4", renk: "#57534e" },
 } as const;
+
+const KOYU_ACCENT = "#5a1826";
+
+function oranRengi(oran: number): string {
+  return oran >= 80 ? "#047857" : oran >= 60 ? "#b45309" : "#be123c";
+}
 
 export default function DegerlendirmeRaporPage() {
   const { id } = useParams<{ id: string }>();
   const [d, setD] = useState<Degerlendirme | null>(null);
+  const [tasarim, setTasarim] = useState<RaporTasarimAyarlari>(() => tasarimBirlestir(null));
   const [loading, setLoading] = useState(true);
   const [excelIndiriliyor, setExcelIndiriliyor] = useState(false);
   const [pdfIndiriliyor, setPdfIndiriliyor] = useState(false);
 
   useEffect(() => {
-    getDegerlendirme(id).then(data => { setD(data); setLoading(false); });
+    Promise.all([getDegerlendirme(id), getRaporTasarim().catch(() => null)]).then(([data, kayit]) => {
+      setD(data);
+      setTasarim(tasarimBirlestir(kayit));
+      setLoading(false);
+    });
   }, [id]);
 
   async function handleExcelIndir() {
@@ -68,6 +86,7 @@ export default function DegerlendirmeRaporPage() {
     d.puansizCevaplar !== undefined && (d.puanli === false || d.puanGirisTipi === "manuel");
   const bolumSirasi = Object.keys(d.bolumSnapshot);
   const sistem = d.skorlamaSistemi ?? "oran";
+  const kunyeFont = fontCss(tasarim.fontlar.kunye);
 
   // Yeni format: sıralı izlenmeler ve gün gruplama
   const siralanmis = isLegacy ? [] : [...d.izlenmeler].sort(
@@ -83,6 +102,10 @@ export default function DegerlendirmeRaporPage() {
     }
     return [...map.entries()];
   })();
+
+  const donem = d.ay !== undefined
+    ? `${AYLAR[d.ay]} ${d.yil}`
+    : d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
 
   return (
     <div className="w-full print:max-w-full">
@@ -113,72 +136,121 @@ export default function DegerlendirmeRaporPage() {
         </div>
       </div>
 
-      {/* ── Puansız (tek seferlik) format ───────────────────────────────── */}
-      {isPuansizNewFormat && <PuansizRaporIcerik d={d} />}
-
-      {/* Özet kart (puanlı matris / eski format) */}
-      {!isPuansizNewFormat && (
-      <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-4">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold text-slate-900">{d.formAd}</h1>
-              <Badge variant={d.puanli ? "puanli" : "puansiz"} />
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-slate-600">
-              <span className="inline-flex items-center gap-1.5"><User size={13} className="text-slate-400" /> {d.personelAd}</span>
-              {d.magazaAd && <span className="inline-flex items-center gap-1.5"><Store size={13} className="text-slate-400" /> {d.magazaAd}</span>}
-              <span className="inline-flex items-center gap-1.5">
-                <Calendar size={13} className="text-slate-400" />
-                {d.ay !== undefined ? `${AYLAR[d.ay]} ${d.yil}` : d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—"}
-              </span>
-              {d.kameramanAd && (
-                <span className="inline-flex items-center gap-1.5 text-violet-700">
-                  <Camera size={13} /> {d.kameramanAd}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400">{siralanmis.length} izlenme kaydı</p>
-          </div>
-          {d.puanli && d.toplamPuan !== null && (
-            <div className="text-right shrink-0">
-              <p className={`text-4xl font-bold ${(d.toplamPuan / (d.maxPuan ?? 1)) >= 0.8 ? "text-emerald-600" : (d.toplamPuan / (d.maxPuan ?? 1)) >= 0.6 ? "text-amber-500" : "text-red-500"}`}>
-                {d.toplamPuan}
-              </p>
-              <p className="text-xs text-slate-400">/ {d.maxPuan} puan</p>
-              {d.maxPuan && d.maxPuan > 0 && (
-                <p className="text-sm font-semibold text-slate-600 mt-0.5">
-                  %{Math.round((d.toplamPuan / d.maxPuan) * 100)}
-                </p>
-              )}
-            </div>
-          )}
+      {/* ── Puansız / yorumlu puanlı: PDF ile birebir aynı görünüm ─────────── */}
+      {isPuansizNewFormat && (
+        <div
+          className="rounded-[10px] border shadow-sm mx-auto"
+          style={{
+            width: PDF_SAYFA_GENISLIK,
+            maxWidth: "100%",
+            background: RAPOR_RENK.kagit,
+            borderColor: RAPOR_RENK.line,
+            padding: "40px 48px 48px",
+          }}
+        >
+          {pdfRaporBloklariOlustur(d, tasarim).map((b, i) => (
+            <div key={i}>{b.el}</div>
+          ))}
         </div>
-      </div>
+      )}
+
+      {/* ── Puanlı matris / eski format: bordo tasarımlı önizleme ──────────── */}
+      {!isPuansizNewFormat && (
+        <div
+          className="rounded-[10px] border shadow-sm p-6 mb-4"
+          style={{ background: RAPOR_RENK.kagit, borderColor: RAPOR_RENK.line }}
+        >
+          <RaporBant tasarim={tasarim} rozet={d.puanli ? "PUANLI" : "PUANSIZ"} />
+
+          <h1
+            className="font-extrabold leading-tight pt-5 pb-4 m-0"
+            style={{ color: RAPOR_RENK.ink, fontFamily: fontCss(tasarim.fontlar.baslik), fontSize: tasarim.boyutlar.baslik }}
+          >
+            {d.formAd}
+          </h1>
+
+          <div className="flex items-stretch gap-3.5">
+            <div
+              className="flex-1 grid grid-cols-4 gap-x-5 gap-y-4 rounded-xl px-6 py-5"
+              style={{ background: RAPOR_RENK.metaBg, border: `1px solid ${RAPOR_RENK.line}` }}
+            >
+              <RaporMetaAlan etiket="Personel" deger={d.personelAd} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
+              <RaporMetaAlan etiket="Mağaza" deger={d.magazaAd ?? ""} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
+              <RaporMetaAlan etiket="Dönem" deger={donem} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
+              <RaporMetaAlan
+                etiket={isLegacy ? "Raporlama Tarihi" : "İzlenme Sayısı"}
+                deger={isLegacy ? d.olusturmaTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—" : String(siralanmis.length)}
+                kunyeFont={kunyeFont}
+                boyut={tasarim.boyutlar.kunye}
+              />
+            </div>
+            {d.puanli && d.toplamPuan !== null && (
+              <div
+                className="w-[130px] shrink-0 rounded-xl flex flex-col items-center justify-center gap-1"
+                style={{ background: RAPOR_RENK.accent, color: RAPOR_RENK.onAccent }}
+              >
+                <b className="font-extrabold leading-none" style={{ fontFamily: fontCss(tasarim.fontlar.puan), fontSize: tasarim.boyutlar.puan }}>
+                  {d.toplamPuan}
+                </b>
+                <span className="text-[10px]" style={{ fontFamily: RAPOR_MONO, opacity: 0.85 }}>
+                  / {d.maxPuan} PUAN
+                </span>
+                {d.maxPuan && d.maxPuan > 0 && (
+                  <span className="text-[12px] font-bold" style={{ fontFamily: RAPOR_MONO }}>
+                    %{Math.round((d.toplamPuan / d.maxPuan) * 100)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Yeni format: Matris tablosu ──────────────────────────────────── */}
       {!isPuansizNewFormat && !isLegacy && (
-        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div
+          className="rounded-[10px] border overflow-hidden"
+          style={{ background: RAPOR_RENK.kagit, borderColor: RAPOR_RENK.line }}
+        >
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm" style={{ minWidth: `${300 + siralanmis.length * 90}px` }}>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-20 bg-indigo-900 text-white px-4 py-3 text-left font-bold min-w-[280px] border-r border-indigo-800" rowSpan={2}>
-                    <div className="text-base">{d.personelAd.toUpperCase()}</div>
+                  <th
+                    className="sticky left-0 z-20 px-4 py-3 text-left font-bold min-w-[280px]"
+                    style={{ background: RAPOR_RENK.accent, color: "#ffffff", borderRight: `1px solid ${KOYU_ACCENT}` }}
+                    rowSpan={2}
+                  >
+                    <div className="text-base" style={{ fontFamily: fontCss(tasarim.fontlar.soruBaslik), letterSpacing: "0.04em" }}>
+                      {d.personelAd.toUpperCase()}
+                    </div>
                     <div className="text-xs font-normal opacity-70 mt-0.5">{d.magazaAd}</div>
                   </th>
                   {gunluk.map(([dateStr, izs]) => (
-                    <th key={dateStr} colSpan={izs.length}
-                      className="bg-indigo-700 text-white text-center text-xs font-bold py-2 px-2 border-l border-indigo-600 whitespace-nowrap">
+                    <th
+                      key={dateStr}
+                      colSpan={izs.length}
+                      className="text-center text-[11px] font-bold py-2 px-2 whitespace-nowrap"
+                      style={{
+                        background: KOYU_ACCENT,
+                        color: RAPOR_RENK.onAccent,
+                        borderLeft: "1px solid rgba(255,255,255,.14)",
+                        fontFamily: RAPOR_MONO,
+                        letterSpacing: "0.06em",
+                      }}
+                    >
                       {dateStr}
                     </th>
                   ))}
                 </tr>
                 <tr>
                   {siralanmis.map(iz => (
-                    <th key={iz.id} className="bg-amber-100 border-l border-amber-200 px-2 py-2 text-center min-w-[80px]">
-                      <span className="text-xs font-bold text-indigo-900">
+                    <th
+                      key={iz.id}
+                      className="px-2 py-2 text-center min-w-[80px]"
+                      style={{ background: RAPOR_RENK.accentSoft, borderLeft: `1px solid ${RAPOR_RENK.qBorder}` }}
+                    >
+                      <span className="text-xs font-bold" style={{ color: RAPOR_RENK.accent, fontFamily: RAPOR_MONO }}>
                         {iz.tarih.toDate().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </th>
@@ -191,11 +263,22 @@ export default function DegerlendirmeRaporPage() {
                   const bolum = d.bolumSnapshot[bolumId];
                   return (
                     <React.Fragment key={bolumId}>
-                      <tr className="bg-slate-100">
-                        <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 uppercase tracking-wider border-r border-slate-200">
+                      <tr style={{ background: RAPOR_RENK.metaBg }}>
+                        <td
+                          className="sticky left-0 z-10 px-4 py-2 text-[11px] font-bold uppercase"
+                          style={{
+                            background: RAPOR_RENK.metaBg,
+                            color: RAPOR_RENK.accent,
+                            borderRight: `1px solid ${RAPOR_RENK.line}`,
+                            letterSpacing: "0.08em",
+                            fontFamily: fontCss(tasarim.fontlar.soruBaslik),
+                          }}
+                        >
                           {bolum.ad}
                         </td>
-                        {siralanmis.map(iz => <td key={iz.id} className="border-l border-slate-200 bg-slate-100" />)}
+                        {siralanmis.map(iz => (
+                          <td key={iz.id} style={{ background: RAPOR_RENK.metaBg, borderLeft: `1px solid ${RAPOR_RENK.line}` }} />
+                        ))}
                       </tr>
 
                       {bolum.soruIdleri.map((soruId, idx) => {
@@ -207,36 +290,50 @@ export default function DegerlendirmeRaporPage() {
                               sistem
                             )
                           : null;
+                        const zeminRengi = idx % 2 === 0 ? RAPOR_RENK.kagit : RAPOR_RENK.qBg;
 
                         return (
-                          <tr key={soruId} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                            <td className={`sticky left-0 z-10 px-4 py-2.5 border-r border-slate-200 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50"}`}>
+                          <tr key={soruId} style={{ background: zeminRengi }}>
+                            <td
+                              className="sticky left-0 z-10 px-4 py-2.5"
+                              style={{ background: zeminRengi, borderRight: `1px solid ${RAPOR_RENK.line}` }}
+                            >
                               <div className="flex items-start gap-2">
-                                <span className="text-[10px] text-slate-400 mt-0.5 shrink-0">{idx + 1}.</span>
+                                <span className="text-[10px] mt-0.5 shrink-0" style={{ color: RAPOR_RENK.faint, fontFamily: RAPOR_MONO }}>
+                                  {idx + 1}.
+                                </span>
                                 <div className="flex-1">
-                                  <p className="text-xs text-slate-700 leading-relaxed">{soru?.metin}</p>
+                                  <p
+                                    className="leading-relaxed m-0"
+                                    style={{ color: RAPOR_RENK.sub, fontFamily: fontCss(tasarim.fontlar.metin), fontSize: tasarim.boyutlar.metin }}
+                                  >
+                                    {soru?.metin}
+                                  </p>
                                   {sonuc && sonuc.toplamIzlenme > 0 && (
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap" style={{ fontFamily: RAPOR_MONO }}>
                                       {sistem === "esik" && soru?.hedefYuzde !== undefined && (
-                                        <span className="inline-flex items-center gap-0.5 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">
+                                        <span
+                                          className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-medium"
+                                          style={{ background: RAPOR_RENK.accentSoft, color: RAPOR_RENK.accent }}
+                                        >
                                           <Target size={9} /> %{soru.hedefYuzde}
                                         </span>
                                       )}
-                                      <span className={`text-[10px] font-bold ${sonuc.oran >= 80 ? "text-emerald-600" : sonuc.oran >= 60 ? "text-amber-600" : "text-red-500"}`}>
+                                      <span className="text-[10px] font-bold" style={{ color: oranRengi(sonuc.oran) }}>
                                         %{sonuc.oran}
                                       </span>
                                       {sonuc.gecti !== null && (sonuc.gecti
-                                        ? <CheckCircle2 size={11} className="text-emerald-500" />
-                                        : <XCircle size={11} className="text-red-400" />
+                                        ? <CheckCircle2 size={11} style={{ color: "#047857" }} />
+                                        : <XCircle size={11} style={{ color: "#be123c" }} />
                                       )}
                                       {d.puanli && (
-                                        <span className="text-[10px] font-semibold text-indigo-600">
+                                        <span className="text-[10px] font-semibold" style={{ color: RAPOR_RENK.accent }}>
                                           {sonuc.kazanilanPuan}/{soru?.puan}p
                                         </span>
                                       )}
-                                      <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                                        <CheckCircle2 size={9} className="text-emerald-500" />{sonuc.evetSayisi}
-                                        <XCircle size={9} className="text-red-400 ml-1" />{sonuc.hayirSayisi}
+                                      <span className="flex items-center gap-1 text-[10px]" style={{ color: RAPOR_RENK.faint }}>
+                                        <CheckCircle2 size={9} style={{ color: "#047857" }} />{sonuc.evetSayisi}
+                                        <XCircle size={9} className="ml-1" style={{ color: "#be123c" }} />{sonuc.hayirSayisi}
                                         {sonuc.muafSayisi > 0 && <><MinusCircle size={9} className="ml-1" />{sonuc.muafSayisi}</>}
                                       </span>
                                     </div>
@@ -248,11 +345,17 @@ export default function DegerlendirmeRaporPage() {
                               const cevap = iz.cevaplar[soruId];
                               const cfg = cevap ? CEVAP_CONFIG[cevap] : null;
                               return (
-                                <td key={iz.id} className={`border-l border-slate-200 text-center ${cfg ? cfg.bg : ""}`} style={{ minWidth: "80px" }}>
+                                <td
+                                  key={iz.id}
+                                  className="text-center"
+                                  style={{ minWidth: "80px", borderLeft: `1px solid ${RAPOR_RENK.line}`, background: cfg?.bg }}
+                                >
                                   {cfg ? (
-                                    <p className={`py-2 px-1 text-[11px] font-bold ${cfg.text}`}>{cfg.label}</p>
+                                    <p className="py-2 px-1 text-[10px] font-bold m-0" style={{ color: cfg.renk, fontFamily: RAPOR_MONO, letterSpacing: "0.06em" }}>
+                                      {cfg.label}
+                                    </p>
                                   ) : (
-                                    <p className="py-2 text-slate-200 text-xs">—</p>
+                                    <p className="py-2 text-xs m-0" style={{ color: RAPOR_RENK.line }}>—</p>
                                   )}
                                 </td>
                               );
@@ -275,22 +378,42 @@ export default function DegerlendirmeRaporPage() {
           {bolumSirasi.map(bolumId => {
             const bolum = d.bolumSnapshot[bolumId];
             return (
-              <div key={bolumId} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-                <div className="px-5 py-3 bg-slate-50 border-b border-slate-100">
-                  <p className="text-sm font-semibold text-slate-800">{bolum.ad}</p>
+              <div
+                key={bolumId}
+                className="rounded-[10px] border overflow-hidden"
+                style={{ background: RAPOR_RENK.kagit, borderColor: RAPOR_RENK.line }}
+              >
+                <div className="px-5 py-3" style={{ background: RAPOR_RENK.metaBg, borderBottom: `1px solid ${RAPOR_RENK.line}` }}>
+                  <p
+                    className="text-sm font-bold uppercase m-0"
+                    style={{ color: RAPOR_RENK.accent, letterSpacing: "0.06em", fontFamily: fontCss(tasarim.fontlar.soruBaslik) }}
+                  >
+                    {bolum.ad}
+                  </p>
                 </div>
-                <div className="divide-y divide-slate-50">
+                <div>
                   {bolum.soruIdleri.map((soruId, i) => {
                     const soru = d.soruSnapshot[soruId];
                     const cevap = d.cevaplar?.[soruId];
                     const cfg = cevap ? CEVAP_CONFIG[cevap] : null;
                     return (
-                      <div key={soruId} className="flex items-center gap-3 px-5 py-3.5">
-                        <span className="text-xs text-slate-400 w-5 shrink-0">{i + 1}.</span>
-                        <p className="flex-1 text-sm text-slate-700">{soru?.metin}</p>
-                        {d.puanli && soru && <span className="text-xs text-slate-400 shrink-0">{soru.puan} p.</span>}
+                      <div
+                        key={soruId}
+                        className="flex items-center gap-3 px-5 py-3.5"
+                        style={{ borderBottom: `1px solid ${RAPOR_RENK.line}` }}
+                      >
+                        <span className="text-xs w-5 shrink-0" style={{ color: RAPOR_RENK.faint, fontFamily: RAPOR_MONO }}>{i + 1}.</span>
+                        <p className="flex-1 m-0" style={{ color: RAPOR_RENK.sub, fontFamily: fontCss(tasarim.fontlar.metin), fontSize: tasarim.boyutlar.metin }}>
+                          {soru?.metin}
+                        </p>
+                        {d.puanli && soru && (
+                          <span className="text-xs shrink-0" style={{ color: RAPOR_RENK.faint, fontFamily: RAPOR_MONO }}>{soru.puan} p.</span>
+                        )}
                         {cfg && (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${cfg.bg} ${cfg.text}`}>
+                          <span
+                            className="text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0"
+                            style={{ background: cfg.bg, color: cfg.renk, fontFamily: RAPOR_MONO, letterSpacing: "0.06em" }}
+                          >
                             {cfg.label}
                           </span>
                         )}

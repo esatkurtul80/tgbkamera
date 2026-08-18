@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, DM_Mono } from "next/font/google";
+import { Geist, DM_Mono, Playfair_Display, Archivo, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AppShell from "@/components/AppShell";
@@ -7,6 +7,10 @@ import StaleBuildGuard from "@/components/StaleBuildGuard";
 
 const geist  = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const dmMono = DM_Mono({ subsets: ["latin"], weight: ["300","400","500"], variable: "--font-mono" });
+// Rapor tasarımında kullanılan fontlar (Türkçe karakterler için latin-ext şart)
+const playfair   = Playfair_Display({ subsets: ["latin", "latin-ext"], variable: "--font-playfair" });
+const archivo    = Archivo({ subsets: ["latin", "latin-ext"], variable: "--font-archivo" });
+const splineMono = Spline_Sans_Mono({ subsets: ["latin", "latin-ext"], variable: "--font-splinemono" });
 
 export const metadata: Metadata = {
   title: "TGB Kamera Admin",
@@ -22,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={`${geist.variable} ${dmMono.variable}`}>
+    <html lang="tr" className={`${geist.variable} ${dmMono.variable} ${playfair.variable} ${archivo.variable} ${splineMono.variable}`}>
       <body className="flex h-screen overflow-hidden bg-slate-50 antialiased font-[var(--font-geist)]">
         <StaleBuildGuard />
         <AuthProvider>

@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateCustomId } from "@/lib/idUtils";
+import type { RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import { bolumKarisikMi, bolumFormaUygunMu, bolumSinifi, formGerekliSinif, soruSinifiEtiketi } from "@/lib/homojenlik";
 import type {
   Soru,
@@ -659,6 +660,25 @@ export async function finalizeDegerlendirme(
       ...(kameraman ? { kameramanId: kameraman.id, kameramanAd: kameraman.ad } : {}),
     }),
     durum: "kapali",
+    guncellemeTarihi: serverTimestamp(),
+  });
+}
+
+// ─── Rapor Tasarımı Ayarları ────────────────────────────────────────────────
+
+/** Kayıtlı rapor tasarım ayarlarını döner (hiç kaydedilmemişse null). */
+export async function getRaporTasarim(): Promise<Partial<RaporTasarimAyarlari> | null> {
+  const snap = await getDoc(doc(db, "ayarlar", "raporTasarim"));
+  return snap.exists() ? (snap.data() as Partial<RaporTasarimAyarlari>) : null;
+}
+
+/** Rapor tasarım ayarlarını kaydeder (logo kaldırıldıysa alanı tamamen siler). */
+export async function saveRaporTasarim(ayarlar: RaporTasarimAyarlari): Promise<void> {
+  await setDoc(doc(db, "ayarlar", "raporTasarim"), {
+    ...(ayarlar.logoUrl ? { logoUrl: ayarlar.logoUrl } : {}),
+    fontlar: ayarlar.fontlar,
+    boyutlar: ayarlar.boyutlar,
+    harfAraliklar: ayarlar.harfAraliklar,
     guncellemeTarihi: serverTimestamp(),
   });
 }

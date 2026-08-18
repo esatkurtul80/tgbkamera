@@ -65,7 +65,6 @@ export async function degerlendirmeExcelIndir(d: Degerlendirme): Promise<void> {
     ["Personel", d.personelAd],
     ["Mağaza", d.magazaAd || "—"],
     ["Form", d.formAd],
-    ["Kameraman", d.kameramanAd || "—"],
     ["Tip", d.puanli ? "Puanlı" : "Puansız"],
     ["Durum", d.durum === "acik" ? "Devam Ediyor (henüz kaydedilmedi)" : "Tamamlandı"],
   ];
@@ -226,7 +225,7 @@ export async function degerlendirmeListesiExcelIndir(liste: Degerlendirme[]): Pr
   const ws = wb.addWorksheet("Değerlendirmeler");
 
   const basliklar = [
-    "Durum", "Tarih", "Personel", "Mağaza", "Kameraman", "Form", "Tip",
+    "Durum", "Tarih", "Personel", "Mağaza", "Form", "Tip",
     "Toplam Puan", "Max Puan", "Yüzde",
   ];
   const headerRow = ws.addRow(basliklar);
@@ -246,7 +245,6 @@ export async function degerlendirmeListesiExcelIndir(liste: Degerlendirme[]): Pr
       tarih ? tarih.toLocaleDateString("tr-TR") : "—",
       d.personelAd,
       d.magazaAd || "—",
-      d.kameramanAd || "—",
       d.formAd,
       d.puanli ? "Puanlı" : "Puansız",
       d.puanli ? d.toplamPuan ?? "—" : "—",
@@ -256,11 +254,11 @@ export async function degerlendirmeListesiExcelIndir(liste: Degerlendirme[]): Pr
     if (d.durum === "acik") {
       row.getCell(1).font = { color: { argb: "FFB45309" }, bold: true };
     }
-    for (let c = 8; c <= 10; c++) row.getCell(c).alignment = { horizontal: "center" };
+    for (let c = 7; c <= 9; c++) row.getCell(c).alignment = { horizontal: "center" };
   }
 
   ws.columns.forEach((col, i) => {
-    col.width = [14, 12, 22, 20, 20, 26, 10, 12, 12, 10][i] ?? 16;
+    col.width = [14, 12, 22, 20, 26, 10, 12, 12, 10][i] ?? 16;
   });
 
   const tarihEtiketi = new Date().toLocaleDateString("tr-TR").replace(/\./g, "-");

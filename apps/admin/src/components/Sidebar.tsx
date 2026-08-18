@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
   LogOut, Camera, PanelLeftClose, PanelLeftOpen, MapIcon, Store, UserCog,
-  TrendingUp, Plus, BarChart2, Trash2,
+  TrendingUp, Plus, BarChart2, Trash2, Palette,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { KullaniciRol } from "@/types";
@@ -49,6 +49,7 @@ const adminSections: NavSection[] = [
     items: [
       { name: "Değerlendirmeler", href: "/degerlendirmeler", icon: ClipboardList },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
+      { name: "Rapor Tasarımı", href: "/rapor-tasarimi", icon: Palette },
       { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
   },

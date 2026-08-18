@@ -135,51 +135,5 @@ export function PuansizNotAlani({ deger, onChange }: PuansizNotAlaniProps) {
   );
 }
 
-/* ─── Salt okunur cevap gösterimi ──────────────────────────────────────────── */
-interface PuansizCevapGosterProps {
-  tip: SoruTipi;
-  cevap: PuansizCevapDegeri | undefined;
-}
-
-const EHM_STYLE: Record<CevapSecenegi, string> = {
-  evet: "bg-emerald-50 text-emerald-700",
-  hayir: "bg-rose-50 text-rose-700",
-  muaf: "bg-slate-100 text-slate-600",
-};
-const EHM_LABEL: Record<CevapSecenegi, string> = { evet: "Evet", hayir: "Hayır", muaf: "Muaf" };
-
-export function PuansizCevapGoster({ tip, cevap }: PuansizCevapGosterProps) {
-  if (tip === "evet_hayir_muaf") {
-    if (!cevap?.evetHayirMuaf) return <span className="text-slate-300 text-sm">—</span>;
-    return (
-      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${EHM_STYLE[cevap.evetHayirMuaf]}`}>
-        {EHM_LABEL[cevap.evetHayirMuaf]}
-      </span>
-    );
-  }
-
-  const deger =
-    tip === "sayi"
-      ? cevap?.sayi !== undefined
-        ? String(cevap.sayi)
-        : undefined
-      : tip === "tarih"
-      ? cevap?.tarih
-      : tip === "saat"
-      ? cevap?.saat
-      : tip === "kisa_metin"
-      ? cevap?.kisaMetin
-      : cevap?.yorum;
-
-  if (!deger) return <span className="text-slate-300 text-sm">—</span>;
-
-  if (tip === "yorum") {
-    return (
-      <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-lg px-3 py-2.5 leading-relaxed">
-        {deger}
-      </p>
-    );
-  }
-
-  return <span className="text-sm text-slate-700 whitespace-pre-wrap">{deger}</span>;
-}
+// Not: Salt okunur cevap gösterimi (PuansizCevapGoster) rapor önizlemesi PDF
+// tasarımıyla birleşince kaldırıldı — raporlar artık PdfRapor bileşenlerini kullanıyor.

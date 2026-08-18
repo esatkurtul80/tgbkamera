@@ -29,3 +29,11 @@ export async function uploadDegerlendirmeFoto(
   await uploadBytes(storageRef, file);
   return getDownloadURL(storageRef);
 }
+
+/** Rapor tasarımındaki firma logosunu Storage'da `logo/` klasörüne yükler. */
+export async function uploadRaporLogo(file: File): Promise<string> {
+  const uzanti = file.name.split(".").pop()?.toLowerCase() || "png";
+  const storageRef = ref(storage, `logo/logo-${Date.now()}.${uzanti}`);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}

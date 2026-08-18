@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Yeni yapı: degerlendirmeler/{magazaAd}/{personelAd}/{tarih}/{soruId}/{file}
+    match /degerlendirmeler/{magazaAd}/{personelAd}/{tarih}/{soruId}/{file} {
+      allow read, write: if request.auth != null;
+    }
+    // Eski yapı (geçmiş yüklemeler): degerlendirmeler/{degId}/{soruId}/{file}
+    match /degerlendirmeler/{degId}/{soruId}/{file} {
+      allow read, write: if request.auth != null;
+    }
+    // Rapor tasarımı firma logosu
+    match /logo/{file} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
