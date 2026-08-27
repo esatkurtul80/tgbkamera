@@ -11,9 +11,12 @@ import {
   FlatList,
   Platform,
   TextInput,
+  Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
+import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getFormlar,
@@ -23,8 +26,14 @@ import {
   getBolum,
   getSoru,
   createDegerlendirme,
+  getDegerlendirme,
+  updatePuansizDegerlendirme,
 } from '@/lib/firestore';
 import { hesaplaPuan } from '@/lib/skorlama';
+import ErisimYok from '@/components/erisim-yok';
+import { puansizCevapDoluMu } from '@/lib/puansiz';
+import { uploadDegerlendirmeFoto } from '@/lib/storage';
+import { generateCustomId } from '@/lib/idUtils';
 import type {
   Form,
   Magaza,
@@ -34,6 +43,8 @@ import type {
   CevapSecenegi,
   BolumSnapshot,
   SoruSnapshot,
+  SoruTipi,
+  PuansizCevapDegeri,
 } from '@/lib/types';
 
 interface BolumDetay extends Bolum {
@@ -111,8 +122,27 @@ function SeciciModal<T extends { id: string; ad: string }>({
 // ─── Ana Bileşen ─────────────────────────────────────────────────────────────
 
 export default function YeniDegerlendirme() {
+  const { kullanici } = useAuth();
+  // Bölge müdürü değerlendirme oluşturamaz (salt okunur rol)
+  if (kullanici?.rol === 'bolge_muduru') return <ErisimYok />;
+  return <YeniDegerlendirmeIcerik />;
+}
+
+function YeniDegerlendirmeIcerik() {
   const { user, kullanici } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    devam?: string;
+    formId?: string;
+    magazaId?: string;
+    personelId?: string;
+    formAd?: string;
+    magazaAd?: string;
+    personelAd?: string;
+  }>();
+
+  // Devam edilen açık raporun ID'si (puansız / yorumlu puanlı)
+  const [devamDegId, setDevamDegId] = useState<string | null>(null);
 
   // Adım 1
   const [adim, setAdim] = useState<Adim>('secim');
@@ -135,6 +165,10 @@ export default function YeniDegerlendirme() {
   // Adım 2
   const [bolumDetaylar, setBolumDetaylar] = useState<BolumDetay[]>([]);
   const [cevaplar, setCevaplar] = useState<Record<string, CevapSecenegi>>({});
+  const [puansizCevaplar, setPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri>>({});
+  const [toplamPuanGiris, setToplamPuanGiris] = useState('');
+  const [tarihSaatSecici, setTarihSaatSecici] = useState<{ soruId: string; tip: 'tarih' | 'saat' } | null>(null);
+  const [iosPickerDeger, setIosPickerDeger] = useState(new Date());
 
   const [yukleniyor, setYukleniyor] = useState(true);
   const [baslaniyor, setBaslaniyor] = useState(false);
@@ -142,12 +176,104 @@ export default function YeniDegerlendirme() {
   const [personelYukleniyor, setPersonelYukleniyor] = useState(false);
 
   useEffect(() => {
-    Promise.all([getFormlar(), getMagazalar()]).then(([f, m]) => {
-      setFormlar(f);
-      setMagazalar(m);
-      setYukleniyor(false);
-    });
+    async function boot() {
+      try {
+        const [f, m] = await Promise.all([getFormlar(), getMagazalar()]);
+        setFormlar(f);
+        setMagazalar(m);
+
+        if (params.devam) {
+          /* ── Devam modu: açık puansız / yorumlu puanlı raporu yükle ── */
+          const deg = await getDegerlendirme(params.devam);
+          if (!deg || deg.durum === 'kapali') return;
+          // Matris raporsa doğru ekrana yönlendir (emniyet)
+          if (deg.puanli && deg.puanGirisTipi !== 'manuel') {
+            router.replace({ pathname: '/matris', params: { devam: deg.id } });
+            return;
+          }
+          setDevamDegId(deg.id);
+          setSeciliForm({
+            id: deg.formId, ad: deg.formAd, aciklama: '',
+            puanli: deg.puanli, puanGirisTipi: deg.puanGirisTipi,
+            skorlamaSistemi: deg.skorlamaSistemi,
+            bolumIdleri: Object.keys(deg.bolumSnapshot),
+          });
+          setSeciliMagaza({ id: deg.magazaId, ad: deg.magazaAd, aktif: true } as Magaza);
+          setSeciliPersonel({ id: deg.personelId, ad: deg.personelAd, tc: '', magazaIdleri: [], aktif: true } as Personel);
+          if (deg.izlenmeTarihi) setIzlenmeTarihi(deg.izlenmeTarihi.toDate().toISOString().split('T')[0]);
+          setPuansizCevaplar(deg.puansizCevaplar ?? {});
+          setToplamPuanGiris(deg.toplamPuan != null ? String(deg.toplamPuan) : '');
+          setBolumDetaylar(snapshotlardanDetay(deg.bolumSnapshot, deg.soruSnapshot));
+          setAdim('cevapla');
+        } else if (params.formId && params.magazaId && params.personelId) {
+          /* ── Panelden parametrelerle gelindi: seçimleri atla, direkt başla ── */
+          const form = f.find((x) => x.id === params.formId) ?? (await getForm(params.formId));
+          if (!form) return;
+          if (form.puanli && form.puanGirisTipi !== 'manuel') {
+            router.replace({
+              pathname: '/matris',
+              params: {
+                formId: form.id, formAd: form.ad,
+                magazaId: params.magazaId!, magazaAd: params.magazaAd ?? '',
+                personelId: params.personelId!, personelAd: params.personelAd ?? '',
+              },
+            });
+            return;
+          }
+          const magaza =
+            m.find((x) => x.id === params.magazaId) ??
+            ({ id: params.magazaId, ad: params.magazaAd ?? '', aktif: true } as Magaza);
+          setSeciliForm(form);
+          setSeciliMagaza(magaza);
+          setSeciliPersonel({ id: params.personelId, ad: params.personelAd ?? '', tc: '', magazaIdleri: [], aktif: true } as Personel);
+          setBolumDetaylar(await bolumleriYukle(form));
+          setCevaplar({});
+          setPuansizCevaplar({});
+          setToplamPuanGiris('');
+          setAdim('cevapla');
+        }
+      } finally {
+        setYukleniyor(false);
+      }
+    }
+    boot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Rapor snapshot'larından bölüm/soru detayları üretir (devam modunda canlı doküman çekilmez). */
+  function snapshotlardanDetay(
+    bolumSnapshot: Record<string, BolumSnapshot>,
+    soruSnapshot: Record<string, SoruSnapshot>
+  ): BolumDetay[] {
+    return Object.entries(bolumSnapshot).map(([bid, b]) => ({
+      id: bid,
+      ad: b.ad,
+      aciklama: '',
+      soruIdleri: b.soruIdleri,
+      sorular: b.soruIdleri
+        .map((sid) => {
+          const s = soruSnapshot[sid];
+          return s ? ({ id: sid, metin: s.metin, puan: s.puan, hedefYuzde: s.hedefYuzde, tip: s.tip } as Soru) : null;
+        })
+        .filter(Boolean) as Soru[],
+    }));
+  }
+
+  /** Formun bölüm ve soru dokümanlarını yükler. */
+  async function bolumleriYukle(form: Form): Promise<BolumDetay[]> {
+    const detaylar: BolumDetay[] = [];
+    for (const bolumId of form.bolumIdleri) {
+      const bolum = await getBolum(bolumId);
+      if (!bolum) continue;
+      const sorular: Soru[] = [];
+      for (const soruId of bolum.soruIdleri) {
+        const soru = await getSoru(soruId);
+        if (soru) sorular.push(soru);
+      }
+      detaylar.push({ ...bolum, sorular });
+    }
+    return detaylar;
+  }
 
   async function handleMagazaSec(magaza: Magaza) {
     setSeciliMagaza(magaza);
@@ -161,25 +287,29 @@ export default function YeniDegerlendirme() {
 
   async function handleBasla() {
     if (!seciliForm || !seciliPersonel || !seciliMagaza) return;
-    setBaslaniyor(true);
 
+    // Puanlı (otomatik) formlar artık webdeki gibi aylık matris ekranında doldurulur —
+    // eski tek-cevap formatı kullanılmaz.
+    if (seciliForm.puanli && seciliForm.puanGirisTipi !== 'manuel') {
+      router.replace({
+        pathname: '/matris',
+        params: {
+          formId: seciliForm.id, formAd: seciliForm.ad,
+          magazaId: seciliMagaza.id, magazaAd: seciliMagaza.ad,
+          personelId: seciliPersonel.id, personelAd: seciliPersonel.ad,
+        },
+      });
+      return;
+    }
+
+    setBaslaniyor(true);
     const form = await getForm(seciliForm.id);
     if (!form) { setBaslaniyor(false); return; }
 
-    const detaylar: BolumDetay[] = [];
-    for (const bolumId of form.bolumIdleri) {
-      const bolum = await getBolum(bolumId);
-      if (!bolum) continue;
-      const sorular: Soru[] = [];
-      for (const soruId of bolum.soruIdleri) {
-        const soru = await getSoru(soruId);
-        if (soru) sorular.push(soru);
-      }
-      detaylar.push({ ...bolum, sorular });
-    }
-
-    setBolumDetaylar(detaylar);
+    setBolumDetaylar(await bolumleriYukle(form));
     setCevaplar({});
+    setPuansizCevaplar({});
+    setToplamPuanGiris('');
     setAdim('cevapla');
     setBaslaniyor(false);
   }
@@ -188,18 +318,76 @@ export default function YeniDegerlendirme() {
     setCevaplar((prev) => ({ ...prev, [soruId]: cevap }));
   }
 
+  function setPuansizCevap(soruId: string, patch: Partial<PuansizCevapDegeri>) {
+    setPuansizCevaplar((prev) => ({ ...prev, [soruId]: { ...prev[soruId], ...patch } }));
+  }
+
+  // "matris": klasik puanlı evet/hayır/muaf akışı. "serbest": puansız veya yorumlu puanlı
+  // (ikisi de aynı şekilde, serbest tipli sorularla cevaplanır).
+  const cevaplamaSekli: 'matris' | 'serbest' =
+    seciliForm?.puanli && seciliForm?.puanGirisTipi !== 'manuel' ? 'matris' : 'serbest';
+  const isManuelPuan = seciliForm?.puanli === true && seciliForm?.puanGirisTipi === 'manuel';
+
+  function soruCevaplandiMi(soru: Soru): boolean {
+    if (cevaplamaSekli === 'matris') return !!cevaplar[soru.id];
+    return puansizCevapDoluMu(soru.tip ?? 'evet_hayir_muaf', puansizCevaplar[soru.id]);
+  }
+
   const tumSorular = bolumDetaylar.flatMap((b) => b.sorular);
-  const cevaplananSayisi = tumSorular.filter((s) => cevaplar[s.id]).length;
+  const cevaplananSayisi = tumSorular.filter(soruCevaplandiMi).length;
   const tamamlandi = cevaplananSayisi === tumSorular.length && tumSorular.length > 0;
   const ilerleme = tumSorular.length > 0 ? cevaplananSayisi / tumSorular.length : 0;
+  const toplamPuanGirisSayisi = Number(toplamPuanGiris);
+  const skorGecerli =
+    !isManuelPuan ||
+    (toplamPuanGiris.trim() !== '' && Number.isFinite(toplamPuanGirisSayisi) && toplamPuanGirisSayisi >= 0 && toplamPuanGirisSayisi <= 100);
 
   async function handleKaydet() {
     if (!seciliForm || !seciliPersonel || !seciliMagaza || !user) return;
     setKaydediliyor(true);
 
+    /* ── Devam modu: mevcut açık raporu güncelle ve kapat ── */
+    if (devamDegId) {
+      try {
+        const entries = await Promise.all(
+          Object.entries(puansizCevaplar).map(async ([soruId, cevap]) => {
+            const fotolar = cevap.fotograflar ?? [];
+            if (fotolar.length === 0) return [soruId, cevap] as const;
+            // Yalnızca cihazdaki yeni fotoğrafları yükle; zaten yüklenmiş (https) olanları koru
+            const yuklenenler = await Promise.all(
+              fotolar.map((uri, i) =>
+                uri.startsWith('http')
+                  ? Promise.resolve(uri)
+                  : uploadDegerlendirmeFoto(
+                      { degerlendirmeId: devamDegId, soruId, magazaAd: seciliMagaza.ad, personelAd: seciliPersonel.ad, tarih: izlenmeTarihi },
+                      uri,
+                      i
+                    )
+              )
+            );
+            return [soruId, { ...cevap, fotograflar: yuklenenler }] as const;
+          })
+        );
+        await updatePuansizDegerlendirme(devamDegId, {
+          puansizCevaplar: Object.fromEntries(entries),
+          izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi + 'T12:00:00')),
+          toplamPuan: isManuelPuan ? Number(toplamPuanGiris) : null,
+          maxPuan: null,
+          durum: 'kapali',
+          kameramanId: user.uid,
+          kameramanAd: kullanici?.displayName ?? user.displayName ?? '',
+        });
+        router.replace(`/degerlendirme/${devamDegId}`);
+      } catch {
+        Alert.alert('Hata', 'Değerlendirme kaydedilemedi. Lütfen tekrar deneyin.');
+        setKaydediliyor(false);
+      }
+      return;
+    }
+
     const soruSnapshot: Record<string, SoruSnapshot> = {};
     tumSorular.forEach((s) => {
-      soruSnapshot[s.id] = { metin: s.metin, puan: s.puan, hedefYuzde: s.hedefYuzde };
+      soruSnapshot[s.id] = { metin: s.metin, puan: s.puan, hedefYuzde: s.hedefYuzde, tip: s.tip };
     });
 
     const bolumSnapshot: Record<string, BolumSnapshot> = {};
@@ -209,38 +397,95 @@ export default function YeniDegerlendirme() {
 
     let toplamPuan: number | null = null;
     let maxPuan: number | null = null;
-    if (seciliForm.puanli) {
+    if (cevaplamaSekli === 'matris') {
       const hesap = hesaplaPuan(cevaplar, soruSnapshot);
       toplamPuan = hesap.toplamPuan;
       maxPuan = hesap.maxPuan;
+    } else if (isManuelPuan) {
+      toplamPuan = Number(toplamPuanGiris);
     }
 
     try {
-      const id = await createDegerlendirme({
-        formId: seciliForm.id,
-        formAd: seciliForm.ad,
-        personelId: seciliPersonel.id,
-        personelAd: seciliPersonel.ad,
-        magazaId: seciliMagaza.id,
-        magazaAd: seciliMagaza.ad,
-        kameramanId: user.uid,
-        kameramanAd: kullanici?.displayName ?? user.displayName ?? '',
-        izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi + 'T12:00:00')),
-        raporlamaTarihi: Timestamp.fromDate(new Date()),
-        puanli: seciliForm.puanli,
-        skorlamaSistemi: seciliForm.skorlamaSistemi,
-        toplamPuan,
-        maxPuan,
-        cevaplar,
-        bolumSnapshot,
-        soruSnapshot,
-      });
+      const customId = generateCustomId(seciliPersonel.ad);
+      let uploadedPuansizCevaplar: Record<string, PuansizCevapDegeri> = puansizCevaplar;
+
+      if (cevaplamaSekli === 'serbest') {
+        const entries = await Promise.all(
+          Object.entries(puansizCevaplar).map(async ([soruId, cevap]) => {
+            if (!cevap.fotograflar || cevap.fotograflar.length === 0) return [soruId, cevap] as const;
+            const yuklenenler = await Promise.all(
+              cevap.fotograflar.map((uri, i) =>
+                uploadDegerlendirmeFoto(
+                  { degerlendirmeId: customId, soruId, magazaAd: seciliMagaza.ad, personelAd: seciliPersonel.ad, tarih: izlenmeTarihi },
+                  uri,
+                  i
+                )
+              )
+            );
+            return [soruId, { ...cevap, fotograflar: yuklenenler }] as const;
+          })
+        );
+        uploadedPuansizCevaplar = Object.fromEntries(entries);
+      }
+
+      const id = await createDegerlendirme(
+        {
+          formId: seciliForm.id,
+          formAd: seciliForm.ad,
+          personelId: seciliPersonel.id,
+          personelAd: seciliPersonel.ad,
+          magazaId: seciliMagaza.id,
+          magazaAd: seciliMagaza.ad,
+          kameramanId: user.uid,
+          kameramanAd: kullanici?.displayName ?? user.displayName ?? '',
+          izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi + 'T12:00:00')),
+          raporlamaTarihi: Timestamp.fromDate(new Date()),
+          ay: new Date(izlenmeTarihi + 'T12:00:00').getMonth(),
+          yil: new Date(izlenmeTarihi + 'T12:00:00').getFullYear(),
+          durum: 'kapali',
+          izlenmeler: [],
+          puanli: seciliForm.puanli,
+          puanGirisTipi: seciliForm.puanGirisTipi,
+          skorlamaSistemi: seciliForm.skorlamaSistemi,
+          toplamPuan,
+          maxPuan,
+          cevaplar: cevaplamaSekli === 'matris' ? cevaplar : {},
+          puansizCevaplar: cevaplamaSekli === 'matris' ? undefined : uploadedPuansizCevaplar,
+          bolumSnapshot,
+          soruSnapshot,
+        },
+        customId
+      );
 
       router.replace(`/degerlendirme/${id}`);
     } catch {
       Alert.alert('Hata', 'Değerlendirme kaydedilemedi. Lütfen tekrar deneyin.');
       setKaydediliyor(false);
     }
+  }
+
+  async function fotografEkle(soruId: string) {
+    const izin = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!izin.granted) {
+      Alert.alert('İzin gerekli', 'Fotoğraf eklemek için galeri erişim izni vermelisiniz.');
+      return;
+    }
+    const sonuc = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.7,
+    });
+    if (sonuc.canceled || sonuc.assets.length === 0) return;
+    const yeniUrler = sonuc.assets.map((a) => a.uri);
+    setPuansizCevap(soruId, {
+      fotograflar: [...(puansizCevaplar[soruId]?.fotograflar ?? []), ...yeniUrler],
+    });
+  }
+
+  function fotografSil(soruId: string, uri: string) {
+    setPuansizCevap(soruId, {
+      fotograflar: (puansizCevaplar[soruId]?.fotograflar ?? []).filter((u) => u !== uri),
+    });
   }
 
   if (yukleniyor) {
@@ -382,6 +627,113 @@ export default function YeniDegerlendirme() {
 
   // ─── Adım 2: Cevapla ───────────────────────────────────────────────────────
 
+  function renderFotoStrip(soru: Soru) {
+    const fotograflar = puansizCevaplar[soru.id]?.fotograflar ?? [];
+    return (
+      <View style={styles.fotoStrip}>
+        {fotograflar.map((uri) => (
+          <TouchableOpacity key={uri} onLongPress={() => fotografSil(soru.id, uri)} activeOpacity={0.8}>
+            <Image source={{ uri }} style={styles.fotoThumb} />
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.fotoEkleBtn} onPress={() => fotografEkle(soru.id)} activeOpacity={0.75}>
+          <Text style={styles.fotoEkleBtnText}>+ Foto</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  function renderCevapAlani(soru: Soru) {
+    const tip: SoruTipi = soru.tip ?? 'evet_hayir_muaf';
+
+    if (tip === 'evet_hayir_muaf') {
+      const cevap = cevaplamaSekli === 'matris' ? cevaplar[soru.id] : puansizCevaplar[soru.id]?.evetHayirMuaf;
+      return (
+        <View style={styles.cevapBtnRow}>
+          {(['evet', 'hayir', 'muaf'] as CevapSecenegi[]).map((opt) => (
+            <TouchableOpacity
+              key={opt}
+              style={[
+                styles.cevapBtn,
+                cevap === opt && opt === 'evet' && styles.cevapBtnEvet,
+                cevap === opt && opt === 'hayir' && styles.cevapBtnHayir,
+                cevap === opt && opt === 'muaf' && styles.cevapBtnMuaf,
+              ]}
+              onPress={() =>
+                cevaplamaSekli === 'matris' ? setCevap(soru.id, opt) : setPuansizCevap(soru.id, { evetHayirMuaf: opt })
+              }
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[
+                  styles.cevapBtnText,
+                  cevap === opt && opt === 'evet' && styles.cevapTextEvet,
+                  cevap === opt && opt === 'hayir' && styles.cevapTextHayir,
+                  cevap === opt && opt === 'muaf' && styles.cevapTextMuaf,
+                ]}
+              >
+                {opt === 'evet' ? 'Evet' : opt === 'hayir' ? 'Hayır' : 'Muaf'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    }
+
+    if (tip === 'sayi') {
+      const deger = puansizCevaplar[soru.id]?.sayi;
+      return (
+        <TextInput
+          style={styles.puansizInput}
+          value={deger === undefined ? '' : String(deger)}
+          onChangeText={(v) => setPuansizCevap(soru.id, { sayi: v === '' ? undefined : Number(v) })}
+          keyboardType="numeric"
+          placeholder="Sayı girin..."
+          placeholderTextColor="#94a3b8"
+        />
+      );
+    }
+
+    if (tip === 'tarih' || tip === 'saat') {
+      const deger = tip === 'tarih' ? puansizCevaplar[soru.id]?.tarih : puansizCevaplar[soru.id]?.saat;
+      return (
+        <TouchableOpacity
+          style={styles.puansizSecici}
+          onPress={() => { setIosPickerDeger(new Date()); setTarihSaatSecici({ soruId: soru.id, tip }); }}
+          activeOpacity={0.75}
+        >
+          <Text style={deger ? styles.puansizSeciciDoluText : styles.seciciPlaceholder}>
+            {deger || (tip === 'tarih' ? 'Tarih seçin...' : 'Saat seçin...')}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    if (tip === 'kisa_metin') {
+      return (
+        <TextInput
+          style={styles.puansizInput}
+          value={puansizCevaplar[soru.id]?.kisaMetin ?? ''}
+          onChangeText={(v) => setPuansizCevap(soru.id, { kisaMetin: v })}
+          placeholder="Kısa cevap..."
+          placeholderTextColor="#94a3b8"
+        />
+      );
+    }
+
+    // yorum
+    return (
+      <TextInput
+        style={[styles.puansizInput, styles.puansizYorumInput]}
+        value={puansizCevaplar[soru.id]?.yorum ?? ''}
+        onChangeText={(v) => setPuansizCevap(soru.id, { yorum: v })}
+        placeholder="Yorumunuzu yazın..."
+        placeholderTextColor="#94a3b8"
+        multiline
+      />
+    );
+  }
+
   return (
     <View style={styles.flex}>
       {/* Progress bar */}
@@ -406,58 +758,55 @@ export default function YeniDegerlendirme() {
             <View style={styles.bolumHeader}>
               <Text style={styles.bolumAd}>{bolum.ad}</Text>
               <Text style={styles.bolumSayac}>
-                {bolum.sorular.filter((s) => cevaplar[s.id]).length}/{bolum.sorular.length}
+                {bolum.sorular.filter(soruCevaplandiMi).length}/{bolum.sorular.length}
               </Text>
             </View>
 
-            {bolum.sorular.map((soru, i) => {
-              const cevap = cevaplar[soru.id];
-              return (
-                <View key={soru.id} style={[styles.soruRow, i > 0 && styles.soruRowBorder]}>
-                  <Text style={styles.soruMetin}>
-                    <Text style={styles.soruNo}>{i + 1}. </Text>
-                    {soru.metin}
-                    {seciliForm?.puanli && (
-                      <Text style={styles.soruPuan}> ({soru.puan}p)</Text>
-                    )}
-                  </Text>
-                  <View style={styles.cevapBtnRow}>
-                    {(['evet', 'hayir', 'muaf'] as CevapSecenegi[]).map((opt) => (
-                      <TouchableOpacity
-                        key={opt}
-                        style={[
-                          styles.cevapBtn,
-                          cevap === opt && opt === 'evet' && styles.cevapBtnEvet,
-                          cevap === opt && opt === 'hayir' && styles.cevapBtnHayir,
-                          cevap === opt && opt === 'muaf' && styles.cevapBtnMuaf,
-                        ]}
-                        onPress={() => setCevap(soru.id, opt)}
-                        activeOpacity={0.75}
-                      >
-                        <Text
-                          style={[
-                            styles.cevapBtnText,
-                            cevap === opt && opt === 'evet' && styles.cevapTextEvet,
-                            cevap === opt && opt === 'hayir' && styles.cevapTextHayir,
-                            cevap === opt && opt === 'muaf' && styles.cevapTextMuaf,
-                          ]}
-                        >
-                          {opt === 'evet' ? 'Evet' : opt === 'hayir' ? 'Hayır' : 'Muaf'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              );
-            })}
+            {bolum.sorular.map((soru, i) => (
+              <View key={soru.id} style={[styles.soruRow, i > 0 && styles.soruRowBorder]}>
+                <Text style={styles.soruMetin}>
+                  <Text style={styles.soruNo}>{i + 1}. </Text>
+                  {soru.metin}
+                  {cevaplamaSekli === 'matris' && (
+                    <Text style={styles.soruPuan}> ({soru.puan}p)</Text>
+                  )}
+                </Text>
+                {renderCevapAlani(soru)}
+                {cevaplamaSekli === 'serbest' && renderFotoStrip(soru)}
+              </View>
+            ))}
           </View>
         ))}
 
+        {/* Toplam Puan (yorumlu puanlı) */}
+        {isManuelPuan && (
+          <View style={styles.bolumKart}>
+            <View style={styles.bolumHeader}>
+              <Text style={styles.bolumAd}>Toplam Puan (0-100)</Text>
+            </View>
+            <View style={styles.soruRow}>
+              <TextInput
+                style={styles.puansizInput}
+                value={toplamPuanGiris}
+                onChangeText={setToplamPuanGiris}
+                keyboardType="numeric"
+                placeholder="ör. 87"
+                placeholderTextColor="#94a3b8"
+              />
+            </View>
+            {toplamPuanGiris.trim() !== '' && !skorGecerli && (
+              <Text style={{ color: '#ef4444', fontSize: 12, paddingHorizontal: 14, paddingBottom: 10 }}>
+                Puan 0 ile 100 arasında olmalıdır.
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Kaydet butonu */}
         <TouchableOpacity
-          style={[styles.kaydetBtn, (!tamamlandi || kaydediliyor) && styles.kaydetBtnDisabled]}
+          style={[styles.kaydetBtn, (!tamamlandi || !skorGecerli || kaydediliyor) && styles.kaydetBtnDisabled]}
           onPress={handleKaydet}
-          disabled={!tamamlandi || kaydediliyor}
+          disabled={!tamamlandi || !skorGecerli || kaydediliyor}
           activeOpacity={0.85}
         >
           {kaydediliyor ? (
@@ -469,8 +818,60 @@ export default function YeniDegerlendirme() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Tarih/Saat Seçici */}
+      {tarihSaatSecici && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={new Date()}
+          mode={tarihSaatSecici.tip === 'tarih' ? 'date' : 'time'}
+          display="default"
+          onChange={(event, selected) => {
+            const { soruId, tip } = tarihSaatSecici;
+            setTarihSaatSecici(null);
+            if (event.type === 'dismissed' || !selected) return;
+            setPuansizCevap(soruId, tip === 'tarih' ? { tarih: formatTarih(selected) } : { saat: formatSaat(selected) });
+          }}
+        />
+      )}
+      {tarihSaatSecici && Platform.OS === 'ios' && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setTarihSaatSecici(null)}>
+          <View style={modalStyles.pickerOverlay}>
+            <View style={modalStyles.pickerCard}>
+              <DateTimePicker
+                value={iosPickerDeger}
+                mode={tarihSaatSecici.tip === 'tarih' ? 'date' : 'time'}
+                display="spinner"
+                onChange={(_, selected) => selected && setIosPickerDeger(selected)}
+              />
+              <View style={modalStyles.pickerBtnRow}>
+                <TouchableOpacity onPress={() => setTarihSaatSecici(null)} style={modalStyles.pickerBtnCancel}>
+                  <Text style={modalStyles.pickerBtnCancelText}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const { soruId, tip } = tarihSaatSecici;
+                    setPuansizCevap(soruId, tip === 'tarih' ? { tarih: formatTarih(iosPickerDeger) } : { saat: formatSaat(iosPickerDeger) });
+                    setTarihSaatSecici(null);
+                  }}
+                  style={modalStyles.pickerBtnConfirm}
+                >
+                  <Text style={modalStyles.pickerBtnConfirmText}>Tamam</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
+}
+
+function formatTarih(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+function formatSaat(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({
@@ -595,6 +996,42 @@ const styles = StyleSheet.create({
   cevapTextEvet: { color: '#10b981' },
   cevapTextHayir: { color: '#ef4444' },
   cevapTextMuaf: { color: '#64748b' },
+  // Puansız cevap alanları
+  puansizInput: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0f172a',
+    backgroundColor: '#fff',
+  },
+  puansizYorumInput: { minHeight: 70, textAlignVertical: 'top' },
+  puansizSecici: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: '#fff',
+  },
+  puansizSeciciDoluText: { color: '#0f172a', fontSize: 14, fontWeight: '600' },
+  // Fotoğraf
+  fotoStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  fotoThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  fotoEkleBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  fotoEkleBtnText: { fontSize: 11, fontWeight: '600', color: '#4f46e5' },
   // Kaydet
   kaydetBtn: {
     marginTop: 16,
@@ -637,4 +1074,12 @@ const modalStyles = StyleSheet.create({
   sep: { height: 1, backgroundColor: '#f8fafc', marginHorizontal: 20 },
   empty: { padding: 40, alignItems: 'center' },
   emptyText: { color: '#94a3b8', fontSize: 14 },
+  // Tarih/Saat Seçici (iOS)
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.4)', justifyContent: 'flex-end' },
+  pickerCard: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 24 },
+  pickerBtnRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 8 },
+  pickerBtnCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center' },
+  pickerBtnCancelText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+  pickerBtnConfirm: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#4f46e5', alignItems: 'center' },
+  pickerBtnConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });

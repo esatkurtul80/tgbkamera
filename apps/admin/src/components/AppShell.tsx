@@ -25,6 +25,20 @@ const ADMIN_ONLY_PREFIXES = [
   "/formlar", "/bolumler", "/sorular",
 ];
 
+// Bölge müdürü salt okunur: yalnız kendi bölgesinin panel/rapor görünümleri.
+// /degerlendirmeler ve /degerlendirmeler/[id] açık kalır (bölge kapsaması sayfada).
+const BM_DENY_PREFIXES = [
+  "/personel", "/cop-kutusu", "/raporlar/aylik-izlenme",
+  "/tum-degerlendirmeler", "/rapor-tasarimi", "/degerlendirmeler/yeni",
+];
+
+function bmYasakMi(pathname: string): boolean {
+  return (
+    BM_DENY_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    (pathname.startsWith("/degerlendirmeler/") && pathname.endsWith("/duzenle"))
+  );
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, kullanici, loading, signOut } = useAuth();
   const router = useRouter();
@@ -60,6 +74,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         router.replace(ROLE_HOMES[rol]);
         return;
       }
+    }
+
+    // Bölge müdürü salt okunur alan dışına çıkamaz
+    if (rol === "bolge_muduru" && bmYasakMi(pathname)) {
+      router.replace(ROLE_HOMES[rol]);
+      return;
     }
   }, [user, kullanici, rol, loading, isPublic, router, pathname]);
 

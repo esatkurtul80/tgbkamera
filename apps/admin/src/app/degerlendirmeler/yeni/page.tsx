@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff } from "lucide-react";
+import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff, StickyNote, Copy, ClipboardPaste } from "lucide-react";
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
@@ -22,6 +22,8 @@ interface IzlenmeLocal {
   id: string;
   tarih: Date;
   cevaplar: Record<string, CevapSecenegi | undefined>;
+  /** Hücre bazlı notlar: soruId → not metni */
+  notlar?: Record<string, string>;
   kaydedenId?: string;
   kaydedenAd?: string;
 }
@@ -58,7 +60,12 @@ const CEVAP_CYCLE: Record<CevapSecenegi, CevapSecenegi | undefined> = {
 };
 
 /* ─── CevapCell bileşeni ─────────────────────────────────────────────────────── */
-function CevapCell({ cevap, onSet }: { cevap: CevapSecenegi | undefined; onSet(c: CevapSecenegi | undefined): void }) {
+function CevapCell({ cevap, not, onSet }: { cevap: CevapSecenegi | undefined; not?: string; onSet(c: CevapSecenegi | undefined): void }) {
+  // Excel benzeri not göstergesi: hücrenin sağ üst köşesinde amber üçgen
+  const notRozeti = not ? (
+    <span className="absolute top-0 right-0 w-0 h-0 border-t-[10px] border-t-amber-400 border-l-[10px] border-l-transparent rounded-tr-[4px] pointer-events-none" />
+  ) : null;
+
   if (cevap) {
     const isEvet = cevap === "evet";
     const isHayir = cevap === "hayir";
@@ -69,20 +76,23 @@ function CevapCell({ cevap, onSet }: { cevap: CevapSecenegi | undefined; onSet(c
     return (
       <button
         onClick={() => onSet(CEVAP_CYCLE[cevap])}
-        className={`w-full h-[44px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
+        title={not}
+        className={`relative w-full h-[44px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
         {label}
+        {notRozeti}
       </button>
     );
   }
 
   return (
-    <div className="w-full h-[44px] relative group/cell">
+    <div className="w-full h-[44px] relative group/cell" title={not}>
       <div className="absolute inset-0 flex border border-dashed border-slate-200 bg-transparent rounded-[4px] group-hover/cell:opacity-0 transition-opacity"></div>
       <div className="absolute inset-0 flex opacity-0 group-hover/cell:opacity-100 transition-opacity">
         <button onClick={() => onSet("evet")} className="flex-1 flex items-center justify-center bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 font-bold text-[10px] rounded-l-[4px]">E</button>
         <button onClick={() => onSet("hayir")} className="flex-1 flex items-center justify-center bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-600 font-bold text-[10px]">H</button>
         <button onClick={() => onSet("muaf")} className="flex-1 flex items-center justify-center bg-slate-50 hover:bg-slate-500 hover:text-white text-slate-600 font-bold text-[10px] rounded-r-[4px]">M</button>
       </div>
+      {notRozeti}
     </div>
   );
 }
@@ -154,6 +164,10 @@ function YeniDegerlendirmeIcerik() {
   const [izlenmeler,   setIzlenmeler] = useState<IzlenmeLocal[]>([]);
   const [onaylaId,     setOnaylaId]   = useState<string | null>(null); // silme onay
   const [hoverCol,     setHoverCol]   = useState<string | null>(null);
+  // Hücre sağ tık menüsü + not düzenleme + hücre panosu (kopyala/yapıştır)
+  const [ctxMenu,      setCtxMenu]    = useState<{ x: number; y: number; izId: string; soruId: string } | null>(null);
+  const [notDuzenle,   setNotDuzenle] = useState<{ izId: string; soruId: string; taslak: string } | null>(null);
+  const [hucrePano,    setHucrePano]  = useState<{ cevap: CevapSecenegi | undefined; not?: string } | null>(null);
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [senkronBekliyor, setSenkronBekliyor] = useState(false);
 
@@ -212,6 +226,7 @@ function YeniDegerlendirmeIcerik() {
             id: iz.id,
             tarih: iz.tarih.toDate(),
             cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+            notlar: iz.notlar,
             kaydedenId: iz.kaydedenId,
             kaydedenAd: iz.kaydedenAd,
           }));
@@ -253,6 +268,7 @@ function YeniDegerlendirmeIcerik() {
               id: iz.id,
               tarih: iz.tarih.toDate(),
               cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+              notlar: iz.notlar,
             }));
             setIzlenmeler(localIzlenmeler);
             setDevamPuansizCevaplar(mevcutAcikRapor.puansizCevaplar);
@@ -356,6 +372,7 @@ function YeniDegerlendirmeIcerik() {
         id: iz.id,
         tarih: iz.tarih.toDate(),
         cevaplar: iz.cevaplar as Record<string, CevapSecenegi | undefined>,
+        notlar: iz.notlar,
         kaydedenId: iz.kaydedenId,
         kaydedenAd: iz.kaydedenAd,
       }));
@@ -425,6 +442,15 @@ function YeniDegerlendirmeIcerik() {
   const setCevap = useCallback((izId: string, soruId: string, cevap: CevapSecenegi | undefined) => {
     setIzlenmeler(p => p.map(i => i.id !== izId ? i : { ...i, cevaplar: { ...i.cevaplar, [soruId]: cevap } }));
   }, []);
+  const setNot = useCallback((izId: string, soruId: string, not: string | undefined) => {
+    setIzlenmeler(p => p.map(i => {
+      if (i.id !== izId) return i;
+      const notlar = { ...(i.notlar ?? {}) };
+      const temiz = not?.trim();
+      if (temiz) notlar[soruId] = temiz; else delete notlar[soruId];
+      return { ...i, notlar };
+    }));
+  }, []);
   function setSaat(izId: string, v: string) {
     const [h, m] = v.split(":").map(Number);
     setIzlenmeler(p => p.map(i => {
@@ -454,6 +480,7 @@ function YeniDegerlendirmeIcerik() {
         cevaplar: Object.fromEntries(
           Object.entries(i.cevaplar).filter(([, v]) => v)
         ) as Record<string, CevapSecenegi>,
+        ...(i.notlar && Object.keys(i.notlar).length > 0 ? { notlar: i.notlar } : {}),
         kaydedenId: i.kaydedenId,
         kaydedenAd: i.kaydedenAd,
       }));
@@ -511,6 +538,7 @@ function YeniDegerlendirmeIcerik() {
       .map(i => ({
         id: i.id, tarih: Timestamp.fromDate(i.tarih),
         cevaplar: Object.fromEntries(Object.entries(i.cevaplar).filter(([, v]) => v)) as Record<string, CevapSecenegi>,
+        ...(i.notlar && Object.keys(i.notlar).length > 0 ? { notlar: i.notlar } : {}),
         kaydedenId: i.kaydedenId, kaydedenAd: i.kaydedenAd,
       }));
 
@@ -862,13 +890,18 @@ function YeniDegerlendirmeIcerik() {
                         }
 
                         const cells = obs.map(iz => (
-                          <td key={iz.id} 
+                          <td key={iz.id}
                             onMouseEnter={() => setHoverCol(iz.id)}
                             onMouseLeave={() => setHoverCol(null)}
+                            onContextMenu={e => {
+                              e.preventDefault();
+                              setCtxMenu({ x: e.clientX, y: e.clientY, izId: iz.id, soruId: soru.id });
+                            }}
                             className={`border-l border-b border-slate-100 p-2 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
                             style={{ width: 85, minWidth: 85, height: 60 }}>
                             <CevapCell
                               cevap={iz.cevaplar[soru.id]}
+                              not={iz.notlar?.[soru.id]}
                               onSet={c => setCevap(iz.id, soru.id, c)}
                             />
                           </td>
@@ -953,6 +986,95 @@ function YeniDegerlendirmeIcerik() {
           </button>
         </div>
       </div>
+
+      {/* ── Hücre Sağ Tık Menüsü ───────────────────────────────────────────── */}
+      {ctxMenu && (() => {
+        const iz = izlenmeler.find(i => i.id === ctxMenu.izId);
+        const hucreCevap = iz?.cevaplar[ctxMenu.soruId];
+        const hucreNot = iz?.notlar?.[ctxMenu.soruId];
+        const hucreDolu = hucreCevap !== undefined || !!hucreNot;
+        const kapat = () => setCtxMenu(null);
+        const itemCls = "w-full flex items-center gap-2.5 px-3.5 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:pointer-events-none";
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={kapat} onContextMenu={e => { e.preventDefault(); kapat(); }} />
+            <div
+              className="fixed z-50 w-52 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 animate-in fade-in zoom-in-95 duration-100"
+              style={{
+                top: Math.min(ctxMenu.y, window.innerHeight - 240),
+                left: Math.min(ctxMenu.x, window.innerWidth - 220),
+              }}>
+              <button className={itemCls}
+                onClick={() => { setNotDuzenle({ izId: ctxMenu.izId, soruId: ctxMenu.soruId, taslak: hucreNot ?? "" }); kapat(); }}>
+                <StickyNote size={14} className="text-amber-500 shrink-0" /> {hucreNot ? "Notu Düzenle" : "Hücreye Not Ekle"}
+              </button>
+              {hucreNot && (
+                <button className={itemCls}
+                  onClick={() => { setNot(ctxMenu.izId, ctxMenu.soruId, undefined); kapat(); }}>
+                  <StickyNote size={14} className="text-slate-400 shrink-0" /> Notu Kaldır
+                </button>
+              )}
+              <div className="my-1 h-px bg-slate-100" />
+              <button className={itemCls} disabled={!hucreDolu}
+                onClick={() => { setHucrePano({ cevap: hucreCevap, not: hucreNot }); kapat(); }}>
+                <Copy size={14} className="text-slate-500 shrink-0" /> Kopyala
+              </button>
+              <button className={itemCls} disabled={!hucrePano}
+                onClick={() => {
+                  if (hucrePano) {
+                    setCevap(ctxMenu.izId, ctxMenu.soruId, hucrePano.cevap);
+                    setNot(ctxMenu.izId, ctxMenu.soruId, hucrePano.not);
+                  }
+                  kapat();
+                }}>
+                <ClipboardPaste size={14} className="text-slate-500 shrink-0" /> Yapıştır
+              </button>
+              <div className="my-1 h-px bg-slate-100" />
+              <button className={`${itemCls} !text-rose-600 hover:!bg-rose-50`} disabled={!hucreDolu}
+                onClick={() => {
+                  setCevap(ctxMenu.izId, ctxMenu.soruId, undefined);
+                  setNot(ctxMenu.izId, ctxMenu.soruId, undefined);
+                  kapat();
+                }}>
+                <Trash2 size={14} className="shrink-0" /> Sil
+              </button>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ── Hücre Notu Modalı ──────────────────────────────────────────────── */}
+      {notDuzenle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <StickyNote size={15} className="text-amber-500" /> Hücre Notu
+              </h3>
+              <textarea
+                autoFocus
+                rows={4}
+                value={notDuzenle.taslak}
+                onChange={e => setNotDuzenle({ ...notDuzenle, taslak: e.target.value })}
+                placeholder="Bu hücreye özel notunuzu yazın..."
+                className="mt-3 w-full text-sm text-slate-800 border border-slate-200 rounded-xl p-3 bg-slate-50
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all resize-none"
+              />
+            </div>
+            <div className="bg-slate-50 px-5 py-4 flex gap-3">
+              <button onClick={() => setNotDuzenle(null)}
+                className="flex-1 px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+                İptal
+              </button>
+              <button
+                onClick={() => { setNot(notDuzenle.izId, notDuzenle.soruId, notDuzenle.taslak); setNotDuzenle(null); }}
+                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-100">
+                Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Silme Onay Modalı ──────────────────────────────────────────────── */}
       {onaylaId && (

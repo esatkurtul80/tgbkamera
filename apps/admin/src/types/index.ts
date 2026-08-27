@@ -136,6 +136,8 @@ export interface SoruIzlenme {
   id: string;
   tarih: Timestamp;
   cevaplar: Record<string, CevapSecenegi>;
+  /** Hücre bazlı notlar: soruId → not metni (matris hücresine sağ tık → "Hücreye Not Ekle") */
+  notlar?: Record<string, string>;
   /** Bu günün işaretlemesini yapan kullanıcı — yalnızca canlı ekranda gösterilir, export/PDF'e taşınmaz. */
   kaydedenId?: string;
   kaydedenAd?: string;

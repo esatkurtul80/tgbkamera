@@ -131,3 +131,38 @@ apps/admin/src/app/
 - **Mobile:** React Native (Expo), TypeScript
 - **Backend:** Firebase Firestore, Firebase Auth
 - **Monorepo:** Turborepo
+
+---
+
+## 📱 Expo / Monorepo Bağımlılık Kuralları (ÖNEMLİ — bozma!)
+
+### Mobil app SDK 54'te SABİT kalmalı
+
+App Store'daki Expo Go'nun son sürümü **54.0.2** (Eylül 2025'ten beri güncellenmiyor).
+Telefondaki Expo Go yalnızca SDK 54 çalıştırabildiği için proje 55+ yapılırsa telefonda açılmaz.
+SDK yükseltmesi ancak dev build'e (EAS) geçilirse yapılabilir.
+
+### Root package.json düzeni
+
+Şunlar **birlikte** ve apps/mobile ile **aynı aralıkta** durmalı:
+
+```jsonc
+"devDependencies": {
+  "expo": "~54.0.0",        // expo-router'ın "expo: *" peer'ının root'a latest çekmesini engeller
+  "expo-router": "~6.0.24"  // root'ta olmazsa babel-preset-expo bulamaz → EXPO_ROUTER_APP_ROOT hatası
+},
+"overrides": {
+  "react": "19.1.0",
+  "react-dom": "19.1.0",
+  "react-native": "0.81.5",
+  "react-native-safe-area-context": "~5.6.0",
+  "react-native-screens": "~4.16.0"
+}
+```
+
+### Diğer kurallar
+
+- `npm install` **her zaman root'tan** — apps/* içinde çalıştırma (nested package-lock.json oluşur, ağacı bozar).
+- Bağımlılık değişikliği sonrası doğrulama: `cd apps/mobile && npx expo-doctor` → 18/18 geçmeli.
+- Telefonda test: `cd apps/mobile && npx expo start --go --tunnel` (`--go` şart!).
+- Google Sign-In native modüldür, **Expo Go'da çalışmaz** — login.tsx'teki koşullu yükleme korunmalı; Expo Go'da e-posta ile giriş kullanılır.

@@ -1,20 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MapIcon, Store, Users, ClipboardList, TrendingUp, Eye, BarChart2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { MapIcon, Store, Users, ClipboardList, TrendingUp, Eye, FileText, Percent } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/contexts/AuthContext";
-import { getBolge, getMagazalarByBolge, getDegerlendirmeler } from "@/lib/firestore";
+import { getDegerlendirmelerByMagazaIds } from "@/lib/firestore";
+import { useBmBolge } from "@/hooks/useBmBolge";
+import { bolgeOzetHesapla, type BolgeOzet, type MagazaOzet, type PersonelOzet, type FormOzet } from "@/lib/bolgeOzet";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import Badge from "@/components/ui/Badge";
-import type { Degerlendirme, Magaza, Bolge } from "@/types";
-
-interface MagazaSatir {
-  magaza: Magaza;
-  buAyDeg: number;
-  toplamDeg: number;
-  sonTarih: string | null;
-}
+import type { Degerlendirme } from "@/types";
 
 function StatKart({ icon: Icon, title, value, sub, renk }: {
   icon: React.ElementType; title: string; value: number | string; sub?: string; renk: string;
@@ -31,69 +25,41 @@ function StatKart({ icon: Icon, title, value, sub, renk }: {
   );
 }
 
+function YuzdePill({ yuzde }: { yuzde: number | null }) {
+  if (yuzde === null) return <span className="text-slate-300 text-xs">—</span>;
+  const stil =
+    yuzde >= 80 ? "bg-emerald-100 text-emerald-700" :
+    yuzde >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600";
+  return (
+    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-bold rounded-full ${stil}`}>
+      %{yuzde}
+    </span>
+  );
+}
+
 export default function BolgeMuduruPaneliPage() {
-  const { kullanici } = useAuth();
-  const [bolge, setBolge] = useState<Bolge | null>(null);
-  const [magazaSatirlar, setMagazaSatirlar] = useState<MagazaSatir[]>([]);
-  const [sonDeg, setSonDeg] = useState<Degerlendirme[]>([]);
-  const [stats, setStats] = useState({ magazaSayisi: 0, buAyDeg: 0, toplamDeg: 0 });
+  const { bolge, magazalar, loading: bolgeLoading, bolgeYok } = useBmBolge();
+  const [raporlar, setRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formSekme, setFormSekme] = useState<"puanli" | "puansiz">("puanli");
 
   useEffect(() => {
-    if (!kullanici?.bolgeId) return;
+    if (bolgeLoading || bolgeYok) return;
+    let iptal = false;
+    (async () => {
+      const r = await getDegerlendirmelerByMagazaIds(magazalar.map((m) => m.id));
+      if (!iptal) {
+        setRaporlar(r);
+        setLoading(false);
+      }
+    })();
+    return () => { iptal = true; };
+  }, [bolgeLoading, bolgeYok, magazalar]);
 
-    async function load() {
-      const bolgeId = kullanici!.bolgeId!;
-      const [bolgeData, magazalar] = await Promise.all([
-        getBolge(bolgeId),
-        getMagazalarByBolge(bolgeId),
-      ]);
-      setBolge(bolgeData);
+  const ozet: BolgeOzet = useMemo(() => bolgeOzetHesapla(magazalar, raporlar), [magazalar, raporlar]);
+  const sonDeg = useMemo(() => raporlar.slice(0, 10), [raporlar]);
 
-      // Her mağaza için değerlendirme verileri
-      const degPromises = magazalar.map((m) => getDegerlendirmeler({ magazaId: m.id }));
-      const allDegListesi = await Promise.all(degPromises);
-
-      const now = new Date();
-      const ayBaslangic = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      let toplamDeg = 0;
-      let buAyDeg = 0;
-      const tumDeg: Degerlendirme[] = [];
-
-      const satirlar: MagazaSatir[] = magazalar.map((magaza, i) => {
-        const degListe = allDegListesi[i];
-        const buAy = degListe.filter((d) => {
-          const t = d.izlenmeTarihi?.toDate?.();
-          return t && t >= ayBaslangic;
-        });
-
-        toplamDeg += degListe.length;
-        buAyDeg += buAy.length;
-        tumDeg.push(...degListe);
-
-        const son = degListe[0];
-        return {
-          magaza,
-          buAyDeg: buAy.length,
-          toplamDeg: degListe.length,
-          sonTarih: son?.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? null,
-        };
-      });
-
-      setMagazaSatirlar(satirlar.sort((a, b) => b.buAyDeg - a.buAyDeg));
-
-      // Son değerlendirmeler (tüm mağazalardan karışık, tarih sıralı)
-      const siralanmis = tumDeg.sort((a, b) => (b.izlenmeTarihi?.seconds ?? 0) - (a.izlenmeTarihi?.seconds ?? 0));
-      setSonDeg(siralanmis.slice(0, 10));
-
-      setStats({ magazaSayisi: magazalar.length, buAyDeg, toplamDeg });
-      setLoading(false);
-    }
-    load();
-  }, [kullanici]);
-
-  const magazaColumns: DataColumn<MagazaSatir>[] = [
+  const magazaColumns: DataColumn<MagazaOzet>[] = [
     {
       key: "magaza",
       header: "Mağaza",
@@ -106,69 +72,169 @@ export default function BolgeMuduruPaneliPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-slate-800">{s.magaza.ad}</p>
-            {s.magaza.adres && <p className="text-xs text-slate-400 truncate max-w-[160px]">{s.magaza.adres}</p>}
+            {s.magaza.adres && <p className="text-xs text-slate-400 truncate max-w-40">{s.magaza.adres}</p>}
           </div>
         </div>
       ),
     },
     {
-      key: "buAyDeg",
-      header: "Bu Ay",
+      key: "toplamRapor",
+      header: "Rapor",
       align: "center",
-      width: "100px",
-      sortValue: (s) => s.buAyDeg,
-      cell: (s) => (
-        <span className={`inline-flex items-center justify-center px-2.5 py-0.5 text-xs font-semibold rounded-full ${
-          s.buAyDeg === 0 ? "bg-slate-100 text-slate-400" :
-          s.buAyDeg >= 10 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-        }`}>
-          {s.buAyDeg}
-        </span>
-      ),
+      width: "80px",
+      sortValue: (s) => s.toplamRapor,
+      cell: (s) => <span className="text-sm text-slate-600 font-medium">{s.toplamRapor}</span>,
     },
     {
-      key: "toplamDeg",
-      header: "Toplam",
+      key: "ortalama",
+      header: "Puanlı Ort.",
       align: "center",
-      width: "90px",
-      sortValue: (s) => s.toplamDeg,
-      cell: (s) => <span className="text-sm text-slate-500">{s.toplamDeg}</span>,
+      width: "110px",
+      sortValue: (s) => s.puanliOrtalama ?? -1,
+      cell: (s) => <YuzdePill yuzde={s.puanliOrtalama} />,
+    },
+    {
+      key: "puanli",
+      header: "Puanlı",
+      align: "center",
+      width: "80px",
+      sortValue: (s) => s.puanliRapor,
+      cell: (s) => <span className="text-sm text-slate-500">{s.puanliRapor}</span>,
+    },
+    {
+      key: "puansiz",
+      header: "Puansız",
+      align: "center",
+      width: "80px",
+      sortValue: (s) => s.puansizRapor,
+      cell: (s) => <span className="text-sm text-slate-500">{s.puansizRapor}</span>,
     },
     {
       key: "sonTarih",
-      header: "Son İzlenme",
+      header: "Son Rapor",
       align: "right",
-      width: "130px",
-      cell: (s) => <span className="text-sm text-slate-400">{s.sonTarih ?? <span className="text-slate-300">—</span>}</span>,
+      width: "120px",
+      sortValue: (s) => s.sonTarih?.seconds ?? 0,
+      cell: (s) => (
+        <span className="text-sm text-slate-400">
+          {s.sonTarih?.toDate?.().toLocaleDateString("tr-TR") ?? <span className="text-slate-300">—</span>}
+        </span>
+      ),
+    },
+  ];
+
+  const personelColumns: DataColumn<PersonelOzet>[] = [
+    {
+      key: "personel",
+      header: "Personel",
+      searchValue: (p) => p.personelAd,
+      sortValue: (p) => p.personelAd,
+      cell: (p) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-indigo-600">{p.personelAd.charAt(0).toUpperCase()}</span>
+          </div>
+          <span className="text-sm font-medium text-slate-800">{p.personelAd}</span>
+        </div>
+      ),
     },
     {
-      key: "grafik",
-      header: "Trend",
+      key: "magazalar",
+      header: "Mağaza",
+      searchValue: (p) => p.magazaAdlari.join(" "),
+      cell: (p) => (
+        <div className="flex flex-wrap gap-1">
+          {p.magazaAdlari.map((ad) => (
+            <span key={ad} className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-teal-50 text-teal-700">
+              {ad}
+            </span>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: "ortalama",
+      header: "Puanlı Ort.",
       align: "center",
-      width: "100px",
-      cell: (s) => {
-        const max = magazaSatirlar[0]?.buAyDeg || 1;
-        const yuzde = Math.round((s.buAyDeg / max) * 100);
-        return (
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-teal-500 rounded-full" style={{ width: `${yuzde}%` }} />
+      width: "130px",
+      sortValue: (p) => p.puanliOrtalama ?? -1,
+      cell: (p) =>
+        p.puanliOrtalama !== null ? (
+          <div className="flex items-center gap-2 justify-center">
+            <YuzdePill yuzde={p.puanliOrtalama} />
+            <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  p.puanliOrtalama >= 80 ? "bg-emerald-500" : p.puanliOrtalama >= 50 ? "bg-amber-500" : "bg-red-500"
+                }`}
+                style={{ width: `${p.puanliOrtalama}%` }}
+              />
             </div>
           </div>
-        );
-      },
+        ) : (
+          <span className="text-slate-300 text-xs">—</span>
+        ),
     },
     {
-      key: "detay",
-      header: "",
-      align: "right",
-      width: "50px",
-      cell: (s) => (
-        <Link href={`/raporlar/aylik-izlenme?magazaId=${s.magaza.id}`}
-          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex" title="Aylık Rapor">
-          <BarChart2 size={14} />
-        </Link>
+      key: "puanliRapor",
+      header: "Puanlı Rapor",
+      align: "center",
+      width: "110px",
+      sortValue: (p) => p.puanliRapor,
+      cell: (p) => <span className="text-sm text-slate-500">{p.puanliRapor}</span>,
+    },
+    {
+      key: "puansizRapor",
+      header: "Puansız Rapor",
+      align: "center",
+      width: "110px",
+      sortValue: (p) => p.puansizRapor,
+      cell: (p) => <span className="text-sm text-slate-500">{p.puansizRapor}</span>,
+    },
+  ];
+
+  const puanliFormColumns: DataColumn<FormOzet>[] = [
+    {
+      key: "form",
+      header: "Form",
+      searchValue: (f) => f.formAd,
+      sortValue: (f) => f.formAd,
+      cell: (f) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+            <FileText size={13} className="text-indigo-600" />
+          </div>
+          <span className="text-sm font-medium text-slate-800">{f.formAd}</span>
+        </div>
       ),
+    },
+    {
+      key: "ortalama",
+      header: "Ortalama",
+      align: "center",
+      width: "110px",
+      sortValue: (f) => f.ortalama ?? -1,
+      cell: (f) => <YuzdePill yuzde={f.ortalama} />,
+    },
+    {
+      key: "sayi",
+      header: "Rapor Sayısı",
+      align: "center",
+      width: "110px",
+      sortValue: (f) => f.raporSayisi,
+      cell: (f) => <span className="text-sm text-slate-600 font-medium">{f.raporSayisi}</span>,
+    },
+  ];
+
+  const puansizFormColumns: DataColumn<FormOzet>[] = [
+    puanliFormColumns[0],
+    {
+      key: "sayi",
+      header: "Rapor Sayısı",
+      align: "center",
+      width: "130px",
+      sortValue: (f) => f.raporSayisi,
+      cell: (f) => <span className="text-sm text-slate-600 font-medium">{f.raporSayisi}</span>,
     },
   ];
 
@@ -177,8 +243,8 @@ export default function BolgeMuduruPaneliPage() {
       key: "tarih",
       header: "Tarih",
       width: "110px",
-      sortValue: (d) => d.izlenmeTarihi?.seconds ?? 0,
-      cell: (d) => <span className="text-sm text-slate-500">{d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}</span>,
+      sortValue: (d) => d.olusturmaTarihi?.seconds ?? 0,
+      cell: (d) => <span className="text-sm text-slate-500">{d.olusturmaTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}</span>,
     },
     {
       key: "personel",
@@ -215,6 +281,7 @@ export default function BolgeMuduruPaneliPage() {
       width: "80px",
       sortValue: (d) => d.toplamPuan ?? -1,
       cell: (d) => {
+        if (d.durum === "acik") return <span className="text-[10px] font-bold text-amber-600">DEVAM</span>;
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300 text-xs">—</span>;
         const yuzde = d.maxPuan && d.maxPuan > 0 ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
         return yuzde !== null ? (
@@ -235,7 +302,7 @@ export default function BolgeMuduruPaneliPage() {
     },
   ];
 
-  if (!kullanici?.bolgeId && !loading) {
+  if (bolgeYok) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
@@ -247,53 +314,123 @@ export default function BolgeMuduruPaneliPage() {
     );
   }
 
+  const yukleniyor = loading || bolgeLoading;
+
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* Başlık */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <MapIcon size={18} className="text-blue-600" />
-            <h1 className="text-xl font-bold text-slate-900">
-              {bolge?.ad ?? "Bölge Paneli"}
-            </h1>
-          </div>
-          <p className="text-sm text-slate-500">
-            {new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
-          </p>
+      <div>
+        <div className="flex items-center gap-2 mb-0.5">
+          <MapIcon size={18} className="text-blue-600" />
+          <h1 className="text-xl font-bold text-slate-900">{bolge?.ad ?? "Bölge Paneli"}</h1>
         </div>
-        <Link href="/raporlar/aylik-izlenme"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-          <BarChart2 size={15} /> Aylık Rapor
-        </Link>
+        <p className="text-sm text-slate-500">
+          {new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
+          {ozet.acikRapor > 0 && (
+            <span className="ml-2 text-xs font-semibold text-amber-600">· {ozet.acikRapor} devam eden rapor</span>
+          )}
+        </p>
       </div>
 
       {/* Stats */}
-      {loading ? (
-        <div className="grid grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <div key={i} className="bg-white rounded-2xl h-28 border border-slate-100 animate-pulse" />)}
+      {yukleniyor ? (
+        <div className="grid grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="bg-white rounded-2xl h-28 border border-slate-100 animate-pulse" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          <StatKart icon={Store} title="Mağaza" value={stats.magazaSayisi} sub="bu bölgede" renk="bg-teal-500" />
-          <StatKart icon={ClipboardList} title="Bu Ay Değerlendirme" value={stats.buAyDeg} renk="bg-blue-500" />
-          <StatKart icon={TrendingUp} title="Toplam Değerlendirme" value={stats.toplamDeg} renk="bg-indigo-500" />
+        <div className="grid grid-cols-4 gap-4">
+          <StatKart icon={Store} title="Mağaza" value={magazalar.length} sub="bu bölgede" renk="bg-teal-500" />
+          <StatKart icon={ClipboardList} title="Bu Ay Rapor" value={ozet.buAyRapor} renk="bg-blue-500" />
+          <StatKart icon={TrendingUp} title="Toplam Rapor" value={ozet.toplamRapor} sub="kapalı raporlar" renk="bg-indigo-500" />
+          <StatKart
+            icon={Percent}
+            title="Bölge Ortalaması"
+            value={ozet.bolgeOrtalama !== null ? `%${ozet.bolgeOrtalama}` : "—"}
+            sub="puanlı raporlardan"
+            renk="bg-violet-500"
+          />
         </div>
       )}
 
-      {/* Mağaza tablosu */}
+      {/* Mağazalar */}
       <div>
-        <h2 className="text-base font-semibold text-slate-800 mb-3">Mağaza Değerlendirme Özeti</h2>
+        <h2 className="text-base font-semibold text-slate-800 mb-3">Mağazalar</h2>
         <DataTable
-          data={magazaSatirlar}
+          data={ozet.magazalar}
           columns={magazaColumns}
           rowKey={(s) => s.magaza.id}
-          loading={loading}
+          loading={yukleniyor}
           searchPlaceholder="Mağaza ara..."
           emptyIcon={Store}
           emptyTitle="Bu bölgede mağaza yok"
           defaultPageSize={10}
         />
+      </div>
+
+      {/* Personel puanları */}
+      <div>
+        <h2 className="text-base font-semibold text-slate-800 mb-3">Personel Puanları</h2>
+        <DataTable
+          data={ozet.personeller}
+          columns={personelColumns}
+          rowKey={(p) => p.personelId}
+          loading={yukleniyor}
+          searchPlaceholder="Personel ara..."
+          emptyIcon={Users}
+          emptyTitle="Bu bölgede raporlanmış personel yok"
+          defaultPageSize={10}
+        />
+      </div>
+
+      {/* Form türleri: puanlı / puansız */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-800">Form Türleri</h2>
+          <div className="flex rounded-lg bg-slate-100 p-0.5">
+            <button
+              onClick={() => setFormSekme("puanli")}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                formSekme === "puanli" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Puanlı ({ozet.puanliFormlar.length})
+            </button>
+            <button
+              onClick={() => setFormSekme("puansiz")}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                formSekme === "puansiz" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Puansız ({ozet.puansizFormlar.length})
+            </button>
+          </div>
+        </div>
+        {formSekme === "puanli" ? (
+          <>
+            <DataTable
+              data={ozet.puanliFormlar}
+              columns={puanliFormColumns}
+              rowKey={(f) => f.formId}
+              loading={yukleniyor}
+              searchPlaceholder="Form ara..."
+              emptyIcon={FileText}
+              emptyTitle="Puanlı form raporu yok"
+              defaultPageSize={10}
+            />
+            <p className="text-[11px] text-slate-400 mt-2">Yorumlu (elle puan girilen) raporlar ortalamaya dahil edilmez.</p>
+          </>
+        ) : (
+          <DataTable
+            data={ozet.puansizFormlar}
+            columns={puansizFormColumns}
+            rowKey={(f) => f.formId}
+            loading={yukleniyor}
+            searchPlaceholder="Form ara..."
+            emptyIcon={FileText}
+            emptyTitle="Puansız form raporu yok"
+            defaultPageSize={10}
+          />
+        )}
       </div>
 
       {/* Son değerlendirmeler */}
@@ -306,8 +443,8 @@ export default function BolgeMuduruPaneliPage() {
           data={sonDeg}
           columns={degColumns}
           rowKey={(d) => d.id}
-          loading={loading}
-          searchPlaceholder="Personel, mağaza veya form ara..."
+          loading={yukleniyor}
+          searchPlaceholder="Personel veya mağaza ara..."
           emptyIcon={ClipboardList}
           emptyTitle="Henüz değerlendirme yok"
           defaultPageSize={10}

@@ -8,7 +8,7 @@ import {
   PDF_SAYFA_GENISLIK,
   RAPOR_RENK,
 } from "@/components/degerlendirme/PdfRapor";
-import { getRaporTasarim } from "@/lib/firestore";
+import { getRaporTasarim, getOncekiRaporPuanlari } from "@/lib/firestore";
 import { tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import type { Degerlendirme, PuansizCevapDegeri } from "@/types";
 
@@ -73,10 +73,16 @@ export async function degerlendirmePdfIndir(d: Degerlendirme): Promise<void> {
   }
   if (tasarim.logoUrl) tasarim = { ...tasarim, logoUrl: viaProxy(tasarim.logoUrl) };
 
+  // Personelin önceki son 3 rapor puanı — okunamazsa alan gösterilmeden devam edilir.
+  let sonRaporlar: Degerlendirme[] = [];
+  try {
+    sonRaporlar = await getOncekiRaporPuanlari(d);
+  } catch { /* alan opsiyonel */ }
+
   // Özel fontların (Playfair, Archivo, Spline Sans Mono) canvas'a doğru çizilmesi için yüklenmelerini bekle.
   await document.fonts.ready;
 
-  const bloklar = pdfRaporBloklariOlustur(guvenli, tasarim);
+  const bloklar = pdfRaporBloklariOlustur(guvenli, tasarim, sonRaporlar);
 
   const container = document.createElement("div");
   container.style.position = "fixed";

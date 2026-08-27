@@ -8,7 +8,11 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.tgbkamera.mobile",
+      "infoPlist": {
+        "NSSupportsLiveActivities": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,11 +35,27 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.14088134036-dummy"
         }
+      ],
+      "@bacons/apple-targets",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Değerlendirme formlarına fotoğraf eklemek için galeriye erişim gerekiyor.",
+          "cameraPermission": "Değerlendirme formlarına fotoğraf çekmek için kameraya erişim gerekiyor."
+        }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    }
+      "typedRoutes": false,
+      "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c65779b1-5882-4785-84e2-c9dff4c6c32b"
+      }
+    },
+    "owner": "esatkurtul"
   }
 }

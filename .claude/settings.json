@@ -4,7 +4,14 @@
       "PowerShell(npm view expo@55.0.26 peerDependencies --json 2>&1)",
       "Bash(del /f package-lock.json)",
       "Bash(npm install *)",
-      "PowerShell(Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-NetTCPConnection -LocalPort 8081 -State Listen -ErrorAction SilentlyContinue)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx -y firebase-tools@latest apphosting:rollouts:create tgbkamera --git-commit ef032cc --project tgbkamera --force)",
+      "PowerShell(gcloud builds log 77f0753e-d64b-4fba-9a22-0fae30cd5a4e --region=us-east4 --project=tgbkamera 2>&1)",
+      "Bash(npx firebase-tools@latest login:list)",
+      "Bash(npx firebase-tools@latest use)"
     ]
   }
 }

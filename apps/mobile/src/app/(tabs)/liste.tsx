@@ -160,14 +160,14 @@ export default function ListeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#edf2ee' },
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     paddingHorizontal: 20,
     paddingTop: 56,
     paddingBottom: 12,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#edf2ee',
   },
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
   headerSub: { fontSize: 13, color: '#94a3b8', marginTop: 2 },

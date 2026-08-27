@@ -1,7 +1,19 @@
 {
+  "firestore": {
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "/mobil-giris.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      }
+    ],
     "rewrites": [
       {
         "source": "/**",

@@ -1,5 +1,12 @@
 export type CevapSecenegi = "evet" | "hayir" | "muaf";
 export type SkorlamaSistemi = "esik" | "oran";
+export type SoruTipi =
+  | "evet_hayir_muaf"
+  | "sayi"
+  | "tarih"
+  | "saat"
+  | "kisa_metin"
+  | "yorum";
 export type KullaniciRol =
   | "admin"
   | "sirketsahibi"
@@ -63,6 +70,7 @@ export interface Soru<T = TimestampLike> {
   metin: string;
   puan: number;
   hedefYuzde?: number;
+  tip?: SoruTipi;
   olusturmaTarihi: T;
   guncellemeTarihi: T;
 }
@@ -107,6 +115,17 @@ export interface SoruSnapshot {
   metin: string;
   puan: number;
   hedefYuzde?: number;
+  tip?: SoruTipi;
+}
+
+export interface PuansizCevapDegeri {
+  evetHayirMuaf?: CevapSecenegi;
+  sayi?: number;
+  tarih?: string;
+  saat?: string;
+  kisaMetin?: string;
+  yorum?: string;
+  fotograflar?: string[];
 }
 
 export interface Degerlendirme<T = TimestampLike> {
@@ -126,6 +145,7 @@ export interface Degerlendirme<T = TimestampLike> {
   toplamPuan: number | null;
   maxPuan: number | null;
   cevaplar: Record<string, CevapSecenegi>;
+  puansizCevaplar?: Record<string, PuansizCevapDegeri>;
   bolumSnapshot: Record<string, BolumSnapshot>;
   soruSnapshot: Record<string, SoruSnapshot>;
   olusturmaTarihi: T;

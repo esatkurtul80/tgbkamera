@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 function AuthGuard() {
@@ -11,7 +12,8 @@ function AuthGuard() {
   useEffect(() => {
     if (loading) return;
 
-    const inAuth = segments[0] === 'login';
+    // 'auth' = Google web köprüsünden dönüş rotası; token'ı kendisi işleyip yönlendirir
+    const inAuth = segments[0] === 'login' || segments[0] === 'auth';
 
     if (!user && !inAuth) {
       router.replace('/login');
@@ -25,6 +27,10 @@ function AuthGuard() {
 
 export default function RootLayout() {
   return (
+    // Açık SafeAreaProvider: bazı Android cihazlarda (ör. Lenovo tablet) başlangıç
+    // pencere ölçüleri gelmeyince alt sekme çubuğu 0 boyuta çöküyor — sağlayıcıyı
+    // kendimiz kurunca ölçüler native onLayout ile güvenilir şekilde gelir.
+    <SafeAreaProvider>
     <AuthProvider>
       <AuthGuard />
       <StatusBar style="dark" />
@@ -55,5 +61,6 @@ export default function RootLayout() {
         />
       </Stack>
     </AuthProvider>
+    </SafeAreaProvider>
   );
 }

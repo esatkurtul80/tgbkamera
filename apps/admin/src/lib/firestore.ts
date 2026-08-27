@@ -11,6 +11,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   serverTimestamp,
   DocumentData,
   QueryDocumentSnapshot,
@@ -473,6 +474,44 @@ export async function getDegerlendirmeler(filters?: {
   return snap.docs.map((d) => toDoc<Degerlendirme>(d));
 }
 
+/**
+ * Verilen mağazaların tüm raporları — bölge müdürü kapsamı için.
+ * Firestore 'in' sorgusu 10'luk parçalara bölünür (mobil firebase 9.23 ile aynı sınır);
+ * parça sonuçları birleştirilip tarihe göre yeniden sıralanır (birleşim sırayı bozar).
+ * Mevcut magazaId+olusturmaTarihi kompozit indeksini kullanır.
+ */
+export async function getDegerlendirmelerByMagazaIds(
+  magazaIds: string[],
+  chunkLimit = 500
+): Promise<Degerlendirme[]> {
+  if (magazaIds.length === 0) return [];
+  const parcalar: string[][] = [];
+  for (let i = 0; i < magazaIds.length; i += 10) parcalar.push(magazaIds.slice(i, i + 10));
+  const snaplar = await Promise.all(
+    parcalar.map((ids) =>
+      getDocs(
+        query(
+          collection(db, "degerlendirmeler"),
+          where("magazaId", "in", ids),
+          orderBy("olusturmaTarihi", "desc"),
+          limit(chunkLimit)
+        )
+      )
+    )
+  );
+  const hepsi = snaplar.flatMap((s) => s.docs.map((d) => toDoc<Degerlendirme>(d)));
+  hepsi.sort((a, b) => (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0));
+  return hepsi;
+}
+
+/** users.bolgeId atanmadıysa yedek bölge çözümü: bolgeMuduruId === uid olan bölge. */
+export async function getBolgeByMuduruId(uid: string): Promise<Bolge | null> {
+  const snap = await getDocs(
+    query(collection(db, "bolgeler"), where("bolgeMuduruId", "==", uid), limit(1))
+  );
+  return snap.empty ? null : toDoc<Bolge>(snap.docs[0]);
+}
+
 /** Belirli bir ay/yıl için (tüm kameramanlar, tüm mağazalar) tüm raporları döner. */
 export async function getDegerlendirmelerByAyYil(ay: number, yil: number): Promise<Degerlendirme[]> {
   const snap = await getDocs(
@@ -484,6 +523,33 @@ export async function getDegerlendirmelerByAyYil(ay: number, yil: number): Promi
 export async function getDegerlendirme(id: string): Promise<Degerlendirme | null> {
   const snap = await getDoc(doc(db, "degerlendirmeler", id));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Degerlendirme) : null;
+}
+
+/**
+ * Bir personelin, verilen rapordan önce oluşturulmuş son `adet` puanlı (toplamPuan
+ * girilmiş) kapalı raporunu döner — rapor PDF'lerindeki "Son Rapor Puanları" alanı için.
+ * Mevcut personelId+olusturmaTarihi index'ini kullanır; kalan filtreler client'ta yapılır.
+ */
+export async function getOncekiRaporPuanlari(d: Degerlendirme, adet = 3): Promise<Degerlendirme[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, "degerlendirmeler"),
+      where("personelId", "==", d.personelId),
+      orderBy("olusturmaTarihi", "desc"),
+      limit(30)
+    )
+  );
+  const suAn = d.olusturmaTarihi?.toMillis() ?? Infinity;
+  return snap.docs
+    .map((x) => toDoc<Degerlendirme>(x))
+    .filter(
+      (r) =>
+        r.id !== d.id &&
+        r.durum !== "acik" &&
+        r.toplamPuan !== null &&
+        (r.olusturmaTarihi?.toMillis() ?? 0) < suAn
+    )
+    .slice(0, adet);
 }
 
 export async function createDegerlendirme(

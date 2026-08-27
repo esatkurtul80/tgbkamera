@@ -4,17 +4,20 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2, XCircle, MinusCircle, Target, FileSpreadsheet, FileDown } from "lucide-react";
-import { getDegerlendirme, getRaporTasarim } from "@/lib/firestore";
+import { getDegerlendirme, getRaporTasarim, getOncekiRaporPuanlari } from "@/lib/firestore";
 import { soruPuanHesapla } from "@/lib/skorlama";
 import {
   pdfRaporBloklariOlustur,
   RaporBant,
   RaporMetaAlan,
+  SonRaporlarAlani,
   PDF_SAYFA_GENISLIK,
   RAPOR_RENK,
   RAPOR_MONO,
 } from "@/components/degerlendirme/PdfRapor";
 import { fontCss, tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBmBolge } from "@/hooks/useBmBolge";
 import type { Degerlendirme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -33,8 +36,12 @@ function oranRengi(oran: number): string {
 
 export default function DegerlendirmeRaporPage() {
   const { id } = useParams<{ id: string }>();
+  const { kullanici } = useAuth();
+  // Bölge müdürü yalnız kendi bölgesinin raporunu görebilir (hook diğer rollerde sorgu çalıştırmaz)
+  const { magazaIdSet, loading: bmLoading } = useBmBolge();
   const [d, setD] = useState<Degerlendirme | null>(null);
   const [tasarim, setTasarim] = useState<RaporTasarimAyarlari>(() => tasarimBirlestir(null));
+  const [sonRaporlar, setSonRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
   const [excelIndiriliyor, setExcelIndiriliyor] = useState(false);
   const [pdfIndiriliyor, setPdfIndiriliyor] = useState(false);
@@ -44,6 +51,8 @@ export default function DegerlendirmeRaporPage() {
       setD(data);
       setTasarim(tasarimBirlestir(kayit));
       setLoading(false);
+      // Personelin önceki son 3 rapor puanı — okunamazsa alan gösterilmez.
+      if (data) getOncekiRaporPuanlari(data).then(setSonRaporlar).catch(() => {});
     });
   }, [id]);
 
@@ -69,13 +78,34 @@ export default function DegerlendirmeRaporPage() {
     }
   }
 
-  if (loading) return (
+  if (loading || (kullanici?.rol === "bolge_muduru" && bmLoading)) return (
     <div className="flex justify-center py-16">
       <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
   if (!d) return <p className="text-sm text-slate-500">Değerlendirme bulunamadı.</p>;
+
+  // Bölge sahipliği: BM başka bölgenin raporunu açamaz
+  if (kullanici?.rol === "bolge_muduru" && !magazaIdSet.has(d.magazaId)) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center max-w-sm">
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">🔒</span>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">Erişim Yok</h2>
+          <p className="text-sm text-slate-500">Bu rapor sizin bölgenizdeki bir mağazaya ait değil.</p>
+          <Link
+            href="/panel/bolge-muduru"
+            className="inline-block mt-5 px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Panele Dön
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Eski format desteği
   const isLegacy = !d.izlenmeler || d.izlenmeler.length === 0;
@@ -148,7 +178,7 @@ export default function DegerlendirmeRaporPage() {
             padding: "40px 48px 48px",
           }}
         >
-          {pdfRaporBloklariOlustur(d, tasarim).map((b, i) => (
+          {pdfRaporBloklariOlustur(d, tasarim, sonRaporlar).map((b, i) => (
             <div key={i}>{b.el}</div>
           ))}
         </div>
@@ -193,7 +223,7 @@ export default function DegerlendirmeRaporPage() {
                   {d.toplamPuan}
                 </b>
                 <span className="text-[10px]" style={{ fontFamily: RAPOR_MONO, opacity: 0.85 }}>
-                  / {d.maxPuan} PUAN
+                  {d.maxPuan && d.maxPuan > 0 ? `/ ${d.maxPuan} PUAN` : "PUAN"}
                 </span>
                 {d.maxPuan && d.maxPuan > 0 && (
                   <span className="text-[12px] font-bold" style={{ fontFamily: RAPOR_MONO }}>
@@ -203,6 +233,12 @@ export default function DegerlendirmeRaporPage() {
               </div>
             )}
           </div>
+
+          {sonRaporlar.length > 0 && (
+            <div className="mt-3.5">
+              <SonRaporlarAlani raporlar={sonRaporlar} tasarim={tasarim} />
+            </div>
+          )}
         </div>
       )}
 

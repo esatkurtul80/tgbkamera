@@ -34,7 +34,7 @@ const MONO = RAPOR_MONO;
 
 /** Sayfalamada bölünmez birim: rapor başlığı, bölüm başlığı, soru kartı veya fotoğraf satırı. */
 export interface PdfBlok {
-  tur: "baslik" | "bolum" | "soru" | "foto";
+  tur: "baslik" | "sonpuanlar" | "bolum" | "soru" | "foto";
   el: React.ReactNode;
 }
 
@@ -206,6 +206,57 @@ function RaporBaslik({ d, tasarim }: { d: Degerlendirme; tasarim: RaporTasarimAy
   );
 }
 
+/** Personelin önceki (en fazla 3) rapor puanını raporlama tarihleriyle gösteren alan.
+ *  Hem puanlı hem puansız rapor PDF'lerinde künyenin hemen altında yer alır. */
+export function SonRaporlarAlani({ raporlar, tasarim }: { raporlar: Degerlendirme[]; tasarim: RaporTasarimAyarlari }) {
+  if (raporlar.length === 0) return null;
+  const kunyeFont = fontCss(tasarim.fontlar.kunye);
+  return (
+    <div
+      className="rounded-xl px-6 py-4"
+      style={{ background: RAPOR_RENK.metaBg, border: `1px solid ${RAPOR_RENK.line}` }}
+    >
+      <p
+        className="text-[9px] font-semibold uppercase mt-0 mb-3"
+        style={{ color: RAPOR_RENK.faint, letterSpacing: "0.12em", fontFamily: MONO }}
+      >
+        Son {raporlar.length} Rapor Puanı
+      </p>
+      <div className="flex gap-3">
+        {raporlar.map((r) => {
+          const yuzde =
+            r.toplamPuan !== null && r.maxPuan && r.maxPuan > 0
+              ? Math.round((r.toplamPuan / r.maxPuan) * 100)
+              : null;
+          const tarih = r.olusturmaTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
+          return (
+            <div
+              key={r.id}
+              className="flex-1 min-w-0 flex items-center justify-between gap-3 rounded-[10px] px-4 py-3"
+              style={{ background: "#ffffff", border: `1px solid ${RAPOR_RENK.line}` }}
+            >
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase m-0" style={{ color: RAPOR_RENK.faint, letterSpacing: "0.1em", fontFamily: MONO }}>
+                  Raporlama Tarihi
+                </p>
+                <p className="text-[11px] font-bold m-0 mt-0.5" style={{ color: RAPOR_RENK.ink, fontFamily: MONO }}>
+                  {tarih}
+                </p>
+                <p className="text-[9px] m-0 mt-0.5 truncate" style={{ color: RAPOR_RENK.faint, fontFamily: kunyeFont }}>
+                  {r.formAd}
+                </p>
+              </div>
+              <b className="text-[17px] shrink-0" style={{ color: RAPOR_RENK.accent, fontFamily: MONO }}>
+                {yuzde !== null ? `%${yuzde}` : r.toplamPuan}
+              </b>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BolumBaslik({ sira, ad, cevaplanan, toplam, bolumBaslikFont, boyut }: {
   sira: number; ad: string; cevaplanan: number; toplam: number; bolumBaslikFont: string; boyut: number;
 }) {
@@ -336,8 +387,22 @@ function FotoBlok({ url }: { url: string }) {
  * Raporu, sayfalamada bölünmeden yerleştirilecek atomik bloklara (başlık,
  * bölüm başlıkları, soru kartları ve fotoğraf satırları) ayırarak üretir.
  */
-export function pdfRaporBloklariOlustur(d: Degerlendirme, tasarim: RaporTasarimAyarlari): PdfBlok[] {
+export function pdfRaporBloklariOlustur(
+  d: Degerlendirme,
+  tasarim: RaporTasarimAyarlari,
+  sonRaporlar?: Degerlendirme[]
+): PdfBlok[] {
   const bloklar: PdfBlok[] = [{ tur: "baslik", el: <RaporBaslik d={d} tasarim={tasarim} /> }];
+  if (sonRaporlar && sonRaporlar.length > 0) {
+    bloklar.push({
+      tur: "sonpuanlar",
+      el: (
+        <div className="pb-5">
+          <SonRaporlarAlani raporlar={sonRaporlar} tasarim={tasarim} />
+        </div>
+      ),
+    });
+  }
   const bolumBaslikFont = fontCss(tasarim.fontlar.bolumBaslik);
 
   Object.keys(d.bolumSnapshot).forEach((bolumId, bolumIdx) => {

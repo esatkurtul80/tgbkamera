@@ -15,6 +15,7 @@ import {
 import type { Degerlendirme, Form, Personel, Magaza } from "@/types";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import BolgeMuduruDegerlendirmelerView from "@/components/degerlendirme/BolgeMuduruDegerlendirmelerView";
 
 // ── Kameraman: yalnızca kendi raporları ──────────────────────────────────────
 
@@ -308,6 +309,11 @@ export default function DegerlendirmelerPage() {
     return <KameramanDegerlendirmelerView />;
   }
 
+  // Bölge müdürü: yalnız kendi bölgesinin raporları, salt okunur
+  if (kullanici?.rol === "bolge_muduru") {
+    return <BolgeMuduruDegerlendirmelerView />;
+  }
+
   return <AdminDegerlendirmelerView />;
 }
 
@@ -554,7 +560,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
         return (
           <div className="flex flex-col items-center gap-1">
             <span className="text-sm font-semibold text-slate-800">
-              {d.toplamPuan} / {d.maxPuan}
+              {yuzde !== null ? `${d.toplamPuan} / ${d.maxPuan}` : d.toplamPuan}
             </span>
             {yuzde !== null && (
               <div className="flex items-center gap-1.5 w-full max-w-[80px]">

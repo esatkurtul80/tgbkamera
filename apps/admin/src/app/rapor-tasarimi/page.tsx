@@ -72,6 +72,16 @@ function ornekDegerlendirme(): Degerlendirme {
   } as unknown as Degerlendirme;
 }
 
+/** Önizlemedeki "Son 3 Rapor Puanı" alanı için örnek geçmiş raporlar. */
+function ornekSonRaporlar(): Degerlendirme[] {
+  const gun = 24 * 60 * 60 * 1000;
+  return [
+    { id: "ON1", formAd: "Puanlı Kasa", toplamPuan: 92, maxPuan: 100, olusturmaTarihi: Timestamp.fromMillis(Date.now() - 30 * gun) },
+    { id: "ON2", formAd: "Puanlı Kasa", toplamPuan: 78, maxPuan: 100, olusturmaTarihi: Timestamp.fromMillis(Date.now() - 60 * gun) },
+    { id: "ON3", formAd: "Mağaza Genel Değerlendirme Formu", toplamPuan: 85, maxPuan: null, olusturmaTarihi: Timestamp.fromMillis(Date.now() - 90 * gun) },
+  ] as unknown as Degerlendirme[];
+}
+
 export default function RaporTasarimiPage() {
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [logoDosya, setLogoDosya] = useState<File | null>(null);
@@ -158,7 +168,7 @@ export default function RaporTasarimiPage() {
   }
 
   const onizlemeTasarim: RaporTasarimAyarlari = { logoUrl: gosterilenLogo, fontlar, boyutlar, harfAraliklar };
-  const bloklar = pdfRaporBloklariOlustur(ornekDegerlendirme(), onizlemeTasarim);
+  const bloklar = pdfRaporBloklariOlustur(ornekDegerlendirme(), onizlemeTasarim, ornekSonRaporlar());
 
   return (
     <div className="flex flex-col gap-5">

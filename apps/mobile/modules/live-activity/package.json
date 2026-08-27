@@ -1,0 +1,15 @@
+{
+  "name": "live-activity",
+  "version": "1.0.0",
+  "description": "TGB Kamera değerlendirme tamamlanma Live Activity köprüsü",
+  "main": "index.ts",
+  "types": "index.ts",
+  "license": "MIT",
+  "author": "esatkurtul",
+  "homepage": "https://github.com/esatkurtul80/tgbkamera",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

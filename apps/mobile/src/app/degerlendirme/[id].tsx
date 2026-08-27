@@ -5,10 +5,16 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  Image,
+  TouchableOpacity,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { getDegerlendirme } from '@/lib/firestore';
-import type { Degerlendirme } from '@/lib/types';
+import { getDegerlendirme, getOncekiRaporPuanlari } from '@/lib/firestore';
+import { soruPuanHesapla } from '@/lib/skorlama';
+import type { CevapSecenegi, Degerlendirme, PuansizCevapDegeri, SoruTipi } from '@/lib/types';
+
+const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
 function CevapBadge({ cevap }: { cevap: string }) {
   const config = {
@@ -24,16 +30,35 @@ function CevapBadge({ cevap }: { cevap: string }) {
   );
 }
 
+function PuansizDeger({ tip, cevap }: { tip: SoruTipi; cevap: PuansizCevapDegeri | null }) {
+  if (tip === 'evet_hayir_muaf') {
+    return cevap?.evetHayirMuaf ? <CevapBadge cevap={cevap.evetHayirMuaf} /> : (
+      <View style={styles.cevapBadge}><Text style={styles.cevapBadgeText}>—</Text></View>
+    );
+  }
+  const metin =
+    tip === 'sayi' ? (cevap?.sayi !== undefined ? String(cevap.sayi) : null) :
+    tip === 'tarih' ? cevap?.tarih ?? null :
+    tip === 'saat' ? cevap?.saat ?? null :
+    tip === 'kisa_metin' ? cevap?.kisaMetin ?? null :
+    cevap?.yorum ?? null;
+  return <Text style={styles.puansizDegerText}>{metin || '—'}</Text>;
+}
+
 export default function DegerlendirmeDetay() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [deg, setDeg] = useState<Degerlendirme | null>(null);
+  const [sonRaporlar, setSonRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
+  const [buyukFoto, setBuyukFoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     getDegerlendirme(id).then((d) => {
       setDeg(d);
       setLoading(false);
+      // Personelin önceki son 3 rapor puanı — okunamazsa alan gösterilmez
+      if (d) getOncekiRaporPuanlari(d).then(setSonRaporlar).catch(() => {});
     });
   }, [id]);
 
@@ -52,6 +77,13 @@ export default function DegerlendirmeDetay() {
       </View>
     );
   }
+
+  const isMatris = deg.puanli && deg.puanGirisTipi !== 'manuel';
+  // Yeni format: çoklu izlenme matrisi (webdeki aylık matris). Eski kayıtlarda cevaplar alanı kullanılır.
+  const izlenmeler = deg.izlenmeler ?? [];
+  const yeniFormat = isMatris && izlenmeler.length > 0;
+  const sistem = deg.skorlamaSistemi ?? 'oran';
+  const donem = deg.ay !== undefined && deg.yil !== undefined ? `${AYLAR[deg.ay]} ${deg.yil}` : null;
 
   const yuzde =
     deg.puanli && deg.toplamPuan !== null && deg.maxPuan && deg.maxPuan > 0
@@ -74,7 +106,9 @@ export default function DegerlendirmeDetay() {
       id: soruId,
       metin: deg.soruSnapshot?.[soruId]?.metin ?? soruId,
       puan: deg.soruSnapshot?.[soruId]?.puan ?? 0,
+      tip: deg.soruSnapshot?.[soruId]?.tip ?? ('evet_hayir_muaf' as SoruTipi),
       cevap: deg.cevaplar?.[soruId] ?? null,
+      puansizCevap: deg.puansizCevaplar?.[soruId] ?? null,
     })),
   }));
 
@@ -111,8 +145,10 @@ export default function DegerlendirmeDetay() {
             <Text style={styles.ozetMetaValue}>{deg.formAd}</Text>
           </View>
           <View style={styles.ozetMetaItem}>
-            <Text style={styles.ozetMetaLabel}>İzlenme</Text>
-            <Text style={styles.ozetMetaValue}>{izlenmeTarihi}</Text>
+            <Text style={styles.ozetMetaLabel}>{yeniFormat ? 'Dönem' : 'İzlenme'}</Text>
+            <Text style={styles.ozetMetaValue}>
+              {yeniFormat ? `${donem ?? '—'} · ${izlenmeler.length} izlenme` : izlenmeTarihi}
+            </Text>
           </View>
           <View style={styles.ozetMetaItem}>
             <Text style={styles.ozetMetaLabel}>Rapor</Text>
@@ -122,10 +158,16 @@ export default function DegerlendirmeDetay() {
             <Text style={styles.ozetMetaLabel}>Tür</Text>
             <View style={[styles.turBadge, deg.puanli ? styles.turPuanli : styles.turPuansiz]}>
               <Text style={[styles.turText, deg.puanli ? styles.turPuanliText : styles.turPuansizText]}>
-                {deg.puanli ? 'Puanlı' : 'Puansız'}
+                {deg.puanli ? (deg.puanGirisTipi === 'manuel' ? 'Yorumlu Puanlı' : 'Puanlı') : 'Puansız'}
               </Text>
             </View>
           </View>
+          {!isMatris && deg.puanli && deg.toplamPuan !== null && (
+            <View style={styles.ozetMetaItem}>
+              <Text style={styles.ozetMetaLabel}>Toplam Puan</Text>
+              <Text style={styles.ozetMetaValue}>{deg.toplamPuan}</Text>
+            </View>
+          )}
         </View>
 
         {/* Puan çubuğu */}
@@ -139,6 +181,30 @@ export default function DegerlendirmeDetay() {
         )}
       </View>
 
+      {/* Son 3 rapor puanı (weble aynı) */}
+      {sonRaporlar.length > 0 && (
+        <View style={styles.sonKart}>
+          <Text style={styles.sonBaslik}>SON {sonRaporlar.length} RAPOR PUANI</Text>
+          {sonRaporlar.map((r) => {
+            const y =
+              r.toplamPuan !== null && r.maxPuan && r.maxPuan > 0
+                ? Math.round((r.toplamPuan / r.maxPuan) * 100)
+                : null;
+            return (
+              <View key={r.id} style={styles.sonSatir}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.sonTarih}>
+                    {r.olusturmaTarihi?.toDate?.().toLocaleDateString('tr-TR') ?? '—'}
+                  </Text>
+                  <Text style={styles.sonForm} numberOfLines={1}>{r.formAd}</Text>
+                </View>
+                <Text style={styles.sonPuan}>{y !== null ? `%${y}` : r.toplamPuan}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
       {/* Sorular */}
       {bolumler.map((bolum) => (
         <View key={bolum.id} style={styles.bolumKart}>
@@ -147,24 +213,92 @@ export default function DegerlendirmeDetay() {
           </View>
           {bolum.sorular.map((soru, i) => (
             <View key={soru.id} style={[styles.soruRow, i > 0 && styles.soruRowBorder]}>
-              <View style={styles.soruSol}>
+              <View style={styles.soruContent}>
+                {/* Soru üstte, cevaplar altta */}
                 <Text style={styles.soruMetin}>
                   <Text style={styles.soruNo}>{i + 1}. </Text>
                   {soru.metin}
                 </Text>
-                {deg.puanli && (
-                  <Text style={styles.soruPuan}>{soru.puan} puan</Text>
+                {isMatris && <Text style={styles.soruPuan}>{soru.puan} puan</Text>}
+
+                <View style={styles.cevapAlan}>
+                  {yeniFormat ? (
+                    (() => {
+                      const sonuc = soruPuanHesapla(
+                        soru.id,
+                        deg.soruSnapshot[soru.id],
+                        izlenmeler.map((iz) => ({ cevaplar: iz.cevaplar as Record<string, CevapSecenegi> })),
+                        sistem
+                      );
+                      return (
+                        <>
+                          <View style={styles.statRozetSatiri}>
+                            <View style={[styles.statRozet, { backgroundColor: '#10b981' }]}>
+                              <Text style={styles.statRozetText}>{sonuc.evetSayisi}E</Text>
+                            </View>
+                            <View style={[styles.statRozet, { backgroundColor: '#ef4444' }]}>
+                              <Text style={styles.statRozetText}>{sonuc.hayirSayisi}H</Text>
+                            </View>
+                            <View style={[styles.statRozet, { backgroundColor: '#94a3b8' }]}>
+                              <Text style={styles.statRozetText}>{sonuc.muafSayisi}M</Text>
+                            </View>
+                          </View>
+                          {sonuc.toplamIzlenme > 0 && (
+                            <Text style={[styles.statOran, { color: sonuc.gecti ? '#10b981' : '#ef4444' }]}>
+                              %{sonuc.oran} · {sonuc.kazanilanPuan}/{soru.puan}P
+                            </Text>
+                          )}
+                        </>
+                      );
+                    })()
+                  ) : isMatris ? (
+                    soru.cevap ? <CevapBadge cevap={soru.cevap} /> : (
+                      <View style={styles.cevapBadge}>
+                        <Text style={styles.cevapBadgeText}>—</Text>
+                      </View>
+                    )
+                  ) : (
+                    <View style={{ flex: 1 }}>
+                      <PuansizDeger tip={soru.tip} cevap={soru.puansizCevap} />
+                    </View>
+                  )}
+                </View>
+                {yeniFormat && (() => {
+                  const notlar = izlenmeler
+                    .filter((iz) => iz.notlar?.[soru.id])
+                    .map((iz) => ({ tarih: iz.tarih.toDate(), not: iz.notlar![soru.id] }));
+                  if (notlar.length === 0) return null;
+                  return (
+                    <View style={styles.notListe}>
+                      {notlar.map((n, ni) => (
+                        <Text key={ni} style={styles.notSatir}>
+                          📝 {n.tarih.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })}{' '}
+                          {n.tarih.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })} — {n.not}
+                        </Text>
+                      ))}
+                    </View>
+                  );
+                })()}
+                {!isMatris && (soru.puansizCevap?.fotograflar?.length ?? 0) > 0 && (
+                  <View style={styles.fotoStrip}>
+                    {soru.puansizCevap!.fotograflar!.map((uri) => (
+                      <TouchableOpacity key={uri} onPress={() => setBuyukFoto(uri)} activeOpacity={0.8}>
+                        <Image source={{ uri }} style={styles.fotoThumb} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 )}
               </View>
-              {soru.cevap ? <CevapBadge cevap={soru.cevap} /> : (
-                <View style={styles.cevapBadge}>
-                  <Text style={styles.cevapBadgeText}>—</Text>
-                </View>
-              )}
             </View>
           ))}
         </View>
       ))}
+
+      <Modal visible={!!buyukFoto} transparent animationType="fade" onRequestClose={() => setBuyukFoto(null)}>
+        <TouchableOpacity style={styles.fotoViewerOverlay} activeOpacity={1} onPress={() => setBuyukFoto(null)}>
+          {buyukFoto && <Image source={{ uri: buyukFoto }} style={styles.fotoViewerImage} resizeMode="contain" />}
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -238,21 +372,66 @@ const styles = StyleSheet.create({
   },
   bolumAd: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
   soruRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 13,
   },
   soruRowBorder: { borderTopWidth: 1, borderTopColor: '#f8fafc' },
-  soruSol: { flex: 1, marginRight: 12 },
+  soruContent: { flex: 1 },
   soruMetin: { fontSize: 13, color: '#334155', lineHeight: 19 },
   soruNo: { fontWeight: '600', color: '#94a3b8' },
   soruPuan: { fontSize: 11, color: '#4f46e5', fontWeight: '600', marginTop: 4 },
+  // Cevaplar sorunun ALTINDA gösterilir (üstte soru, altta cevap düzeni)
+  cevapAlan: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   cevapBadge: {
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     backgroundColor: '#f8fafc',
+    alignSelf: 'flex-start',
   },
   cevapBadgeText: { fontSize: 12, fontWeight: '600', color: '#94a3b8' },
+  puansizDegerText: {
+    fontSize: 13, color: '#0f172a', fontWeight: '600',
+    backgroundColor: '#f8fafc', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 7,
+  },
+  sonKart: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  sonBaslik: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, marginBottom: 10 },
+  sonSatir: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc',
+    gap: 10,
+  },
+  sonTarih: { fontSize: 13, fontWeight: '700', color: '#334155' },
+  sonForm: { fontSize: 11.5, color: '#94a3b8', marginTop: 1 },
+  sonPuan: { fontSize: 16, fontWeight: '800', color: '#4f46e5' },
+  statRozetSatiri: { flexDirection: 'row', gap: 3 },
+  statRozet: { minWidth: 26, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 3, alignItems: 'center' },
+  statRozetText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+  statOran: { fontSize: 11, fontWeight: '800' },
+  notListe: { marginTop: 8, gap: 4 },
+  notSatir: {
+    fontSize: 12,
+    color: '#92400e',
+    backgroundColor: '#fffbeb',
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  fotoStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  fotoThumb: { width: 52, height: 52, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  fotoViewerOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.9)', alignItems: 'center', justifyContent: 'center' },
+  fotoViewerImage: { width: '100%', height: '80%' },
 });

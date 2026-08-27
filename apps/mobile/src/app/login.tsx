@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -12,42 +11,71 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 
 // Google Sign-In Configuration
 // Lütfen Firebase Console > Authentication > Google > Web SDK Configuration altındaki Web Client ID değerini buraya girin.
-const WEB_CLIENT_ID = '14088134036-ujn0382j6p2mle68l912u912v82l81m0.apps.googleusercontent.com';
+const WEB_CLIENT_ID = '14088134036-fhlf47rs02g3o38s552inaj59oc3eolm.apps.googleusercontent.com';
 
-GoogleSignin.configure({
-  webClientId: WEB_CLIENT_ID,
-  offlineAccess: true,
-});
+// Google Sign-In native bir modül ve Expo Go içinde bulunmaz.
+// Expo Go'da import anında hata fırlattığı için sadece dev build'de yüklüyoruz.
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+let GoogleSignin: any = null;
+let statusCodes: Record<string, string> = {};
+if (!isExpoGo) {
+  try {
+    const mod = require('@react-native-google-signin/google-signin');
+    GoogleSignin = mod.GoogleSignin;
+    statusCodes = mod.statusCodes;
+    GoogleSignin.configure({
+      webClientId: WEB_CLIENT_ID,
+      offlineAccess: true,
+    });
+  } catch {
+    // Native modül yok — Google ile giriş devre dışı kalır, e-posta girişi çalışmaya devam eder.
+    GoogleSignin = null;
+  }
+}
 
 export default function LoginScreen() {
-  const { signInWithEmail, signInWithGoogle } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { signInWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
-    if (!email.trim() || !password) return;
-    setLoading(true);
+  // Expo Go'da native Google Sign-In modülü yok; tarayıcı üzerinden Firebase
+  // Hosting'deki köprü sayfası (mobil-giris.html) ile Google OAuth akışı yapılır.
+  async function handleGoogleLoginViaWeb() {
     try {
-      await signInWithEmail(email.trim(), password);
+      setLoading(true);
+      const returnUrl = Linking.createURL('auth');
+      // t= parametresi tarayıcının sayfanın eski kopyasını önbellekten kullanmasını engeller
+      const authUrl =
+        'https://tgbkamera.firebaseapp.com/mobil-giris.html?returnUrl=' +
+        encodeURIComponent(returnUrl) +
+        '&t=' + Date.now();
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, returnUrl);
+      if (result.type !== 'success' || !result.url) {
+        return; // kullanıcı iptal etti
+      }
+      const match = result.url.match(/[?#&]idToken=([^&#]+)/);
+      const idToken = match ? decodeURIComponent(match[1]) : null;
+      if (!idToken) {
+        throw new Error('Google Kimlik Doğrulama Belgesi (ID Token) alınamadı.');
+      }
+      await signInWithGoogle(idToken);
     } catch (err: any) {
-      const msg =
-        err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found'
-          ? 'E-posta veya şifre hatalı.'
-          : err.code === 'auth/too-many-requests'
-          ? 'Çok fazla deneme. Lütfen bekleyin.'
-          : 'Giriş başarısız. Tekrar deneyin.';
-      Alert.alert('Giriş Hatası', msg);
+      Alert.alert('Giriş Hatası', err.message || 'Google ile giriş yapılırken hata oluştu.');
     } finally {
       setLoading(false);
     }
   }
 
   async function handleGoogleLogin() {
+    if (!GoogleSignin) {
+      return handleGoogleLoginViaWeb();
+    }
     try {
       setLoading(true);
       await GoogleSignin.hasPlayServices();
@@ -90,61 +118,11 @@ export default function LoginScreen() {
           <Text style={styles.logoSub}>Değerlendirme Sistemi</Text>
         </View>
 
-        {/* Kart */}
+        {/* Kart — yalnızca Google ile giriş */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Giriş Yap</Text>
+          <Text style={styles.cardSub}>Şirket Google hesabınızla devam edin</Text>
 
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>E-posta</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="ornek@firma.com"
-              placeholderTextColor="#94a3b8"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Şifre</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor="#94a3b8"
-              secureTextEntry
-              autoComplete="password"
-              value={password}
-              onChangeText={setPassword}
-              editable={!loading}
-              onSubmitEditing={handleLogin}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.btn, (!email || !password || loading) && styles.btnDisabled]}
-            onPress={handleLogin}
-            disabled={!email || !password || loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.btnText}>Giriş Yap</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Separator */}
-          <View style={styles.separator}>
-            <View style={styles.separatorLine} />
-            <Text style={styles.separatorText}>veya</Text>
-            <View style={styles.separatorLine} />
-          </View>
-
-          {/* Google Sign-in Button */}
           <TouchableOpacity
             style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
             onPress={handleGoogleLogin}
@@ -204,45 +182,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 20 },
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#475569', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#0f172a',
-    backgroundColor: '#fff',
-  },
-  btn: {
-    marginTop: 8,
-    backgroundColor: '#4f46e5',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e2e8f0',
-  },
-  separatorText: {
-    color: '#94a3b8',
-    fontSize: 13,
-    paddingHorizontal: 12,
-    fontWeight: '500',
-  },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
+  cardSub: { fontSize: 13, color: '#94a3b8', marginBottom: 20 },
   googleBtn: {
     backgroundColor: '#fff',
     borderRadius: 10,
