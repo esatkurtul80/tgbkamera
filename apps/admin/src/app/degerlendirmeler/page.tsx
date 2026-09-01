@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardList, Plus, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
+import { ClipboardList, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
@@ -731,12 +731,6 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
               ? `Seçilenlerin Raporunu İndir (${secilenler.size} dosya)`
               : `Excel İndir (${liste.length})`}
           </button>
-          <Link
-            href="/degerlendirmeler/yeni"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <Plus size={15} /> Yeni Değerlendirme
-          </Link>
         </div>
       </div>
       {secilenler.size > 1 && (
@@ -754,7 +748,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
         searchPlaceholder="Personel, kameraman veya form ara..."
         emptyIcon={ClipboardList}
         emptyTitle="Değerlendirme bulunamadı"
-        emptyDescription="Yeni bir değerlendirme başlatmak için sağ üstteki butona tıklayın."
+        emptyDescription="Yeni raporlar Panelim sayfasında mağaza seçilip personel üzerinden başlatılır."
         defaultPageSize={25}
         toolbar={filterToolbar}
       />

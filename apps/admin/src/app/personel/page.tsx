@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Pencil, Plus, Store, Check, Search, Upload, FileSpreadsheet } from "lucide-react";
+import { Users, Pencil, Plus, Store, Check, Search, Upload, FileSpreadsheet, UserX } from "lucide-react";
 import { Workbook, type Cell } from "exceljs";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -45,6 +45,11 @@ export default function PersonelPage() {
   const [loading, setLoading] = useState(true);
 
   const isKameraman = kullanici?.rol === "kameraman";
+
+  // Aktif / Pasife Alınanlar kategorileri
+  const [durumGorunumu, setDurumGorunumu] = useState<"aktif" | "pasif">("aktif");
+  const aktifPersoneller = personeller.filter((p) => p.aktif);
+  const pasifPersoneller = personeller.filter((p) => !p.aktif);
 
   const [yeniAcik, setYeniAcik] = useState(false);
   const [yeniAd, setYeniAd] = useState("");
@@ -313,19 +318,17 @@ export default function PersonelPage() {
     },
   ];
 
-  if (!isKameraman) {
-    columns.push({
-      key: "islemler",
-      header: "İşlemler",
-      align: "right",
-      width: "80px",
-      cell: (p) => (
-        <button onClick={() => openEdit(p.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
-          <Pencil size={14} />
-        </button>
-      ),
-    });
-  }
+  columns.push({
+    key: "islemler",
+    header: "İşlemler",
+    align: "right",
+    width: "80px",
+    cell: (p) => (
+      <button onClick={() => openEdit(p.id)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Düzenle">
+        <Pencil size={14} />
+      </button>
+    ),
+  });
 
   return (
     <div className="flex flex-col gap-5">
@@ -333,27 +336,55 @@ export default function PersonelPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Personel</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {personeller.length} personel
-            {personeller.filter((p) => p.aktif).length < personeller.length && (
-              <span className="ml-2 text-slate-400">· {personeller.filter((p) => p.aktif).length} aktif</span>
+            {aktifPersoneller.length} aktif personel
+            {pasifPersoneller.length > 0 && (
+              <span className="ml-2 text-slate-400">· {pasifPersoneller.length} pasif</span>
             )}
           </p>
         </div>
-        {!isKameraman && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {!isKameraman && (
             <button onClick={openToplu} className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-slate-700 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
               <Upload size={15} /> Toplu Personel Ekle
             </button>
-            <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-              <Plus size={15} /> Yeni Personel
-            </button>
-          </div>
-        )}
+          )}
+          <button onClick={openYeni} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+            <Plus size={15} /> Yeni Personel
+          </button>
+        </div>
       </div>
 
-      <DataTable data={personeller} columns={columns} rowKey={(p) => p.id} loading={loading}
-        searchPlaceholder="Ad veya TC kimlik no ara..." emptyIcon={Users}
-        emptyTitle="Henüz personel yok" emptyDescription="İlk personeli eklemek için sağ üstteki butona tıklayın." />
+      {/* Aktif / Pasife Alınanlar kategorileri */}
+      <div className="inline-flex items-center gap-1 bg-slate-100 rounded-lg p-1 self-start">
+        <button
+          onClick={() => setDurumGorunumu("aktif")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+            durumGorunumu === "aktif" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Users size={12} />
+          Aktif Personeller
+          <span className="text-[10px] text-slate-400">{aktifPersoneller.length}</span>
+        </button>
+        <button
+          onClick={() => setDurumGorunumu("pasif")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+            durumGorunumu === "pasif" ? "bg-white text-rose-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <UserX size={12} />
+          Pasife Alınanlar
+          <span className="text-[10px] text-slate-400">{pasifPersoneller.length}</span>
+        </button>
+      </div>
+
+      <DataTable data={durumGorunumu === "aktif" ? aktifPersoneller : pasifPersoneller}
+        columns={columns} rowKey={(p) => p.id} loading={loading}
+        searchPlaceholder="Ad veya TC kimlik no ara..." emptyIcon={durumGorunumu === "aktif" ? Users : UserX}
+        emptyTitle={durumGorunumu === "aktif" ? "Henüz personel yok" : "Pasife alınan personel yok"}
+        emptyDescription={durumGorunumu === "aktif"
+          ? "İlk personeli eklemek için sağ üstteki butona tıklayın."
+          : "Bir personeli düzenleme ekranından pasife aldığınızda burada listelenir."} />
 
       {/* Yeni Modal */}
       <Modal open={yeniAcik} onClose={() => setYeniAcik(false)} title="Yeni Personel">
@@ -405,17 +436,15 @@ export default function PersonelPage() {
                 onToggle={(id) => setEditMagazaIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
                 araVal={editMagazaAra} onAraChange={setEditMagazaAra} />
             )}
-            {!isKameraman && (
-              <div>
-                <p className="text-sm font-medium text-slate-700 mb-2">Durum</p>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditAktif(true)}
-                    className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${editAktif ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Aktif</button>
-                  <button type="button" onClick={() => setEditAktif(false)}
-                    className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${!editAktif ? "border-red-400 bg-red-50 text-red-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Pasif</button>
-                </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Durum</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditAktif(true)}
+                  className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${editAktif ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Aktif</button>
+                <button type="button" onClick={() => setEditAktif(false)}
+                  className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${!editAktif ? "border-red-400 bg-red-50 text-red-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Pasif</button>
               </div>
-            )}
+            </div>
             <div className="flex gap-3 pt-1">
               <button type="submit" disabled={editSaving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
                 {editSaving ? "Kaydediliyor..." : "Güncelle"}
