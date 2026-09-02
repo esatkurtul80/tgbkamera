@@ -44,6 +44,11 @@ const PAGE_SIZES = [10, 25, 50, 100];
 
 const TR_TARIH = /^\d{2}\.\d{2}\.\d{4}$/;
 
+/** Türkçe'ye uygun küçük harfe çevirme (İ→i, I→ı) — aramada eşleşme için şart. */
+function trLower(s: string): string {
+  return s.toLocaleLowerCase("tr-TR");
+}
+
 /** dd.MM.yyyy değerlerini kronolojik (en yeni önce), diğerlerini alfabetik sıralar. */
 function optionSirala(a: string, b: string): number {
   if (TR_TARIH.test(a) && TR_TARIH.test(b)) {
@@ -75,7 +80,7 @@ export default function DataTable<T>({
   const [pageSize, setPageSize] = useState(defaultPageSize);
 
   // Excel benzeri sütun filtreleri: sütun anahtarı → seçili değerler.
-  // Boş küme = o sütunda filtre yok (tümü görünür).
+  // Anahtar YOKSA o sütunda filtre yok (tümü seçili); boş küme = hiçbiri seçili değil.
   const [filters, setFilters] = useState<Record<string, Set<string>>>({});
   // Tarih sütunları: sütun anahtarı → {from, to} (yyyy-MM-dd, boş = sınırsız).
   const [dateFilters, setDateFilters] = useState<Record<string, { from: string; to: string }>>({});
@@ -84,7 +89,7 @@ export default function DataTable<T>({
 
   const searchable = showSearch && columns.some((c) => c.searchValue);
   const hasActiveFilters =
-    Object.values(filters).some((s) => s.size > 0) ||
+    Object.keys(filters).length > 0 ||
     Object.values(dateFilters).some((r) => r.from || r.to);
 
   const tarihAraligindaMi = (t: Date | null, aralik: { from: string; to: string }): boolean => {
@@ -99,7 +104,7 @@ export default function DataTable<T>({
   };
 
   const columnFilteredData = useMemo(() => {
-    const aktif = Object.entries(filters).filter(([, s]) => s.size > 0);
+    const aktif = Object.entries(filters);
     const aktifTarih = Object.entries(dateFilters).filter(([, r]) => r.from || r.to);
     if (aktif.length === 0 && aktifTarih.length === 0) return data;
     return data.filter(
@@ -117,9 +122,9 @@ export default function DataTable<T>({
 
   const searchedData = useMemo(() => {
     if (!search.trim()) return columnFilteredData;
-    const lower = search.toLowerCase();
+    const lower = trLower(search);
     return columnFilteredData.filter((row) =>
-      columns.some((col) => col.searchValue?.(row).toLowerCase().includes(lower))
+      columns.some((col) => col.searchValue && trLower(col.searchValue(row)).includes(lower))
     );
   }, [columnFilteredData, search, columns]);
 
@@ -147,7 +152,7 @@ export default function DataTable<T>({
   const acikCol = acikFiltre ? columns.find((c) => c.key === acikFiltre.key) : null;
   const filtreSecenekleri = useMemo(() => {
     if (!acikCol?.filterValue || acikCol.filterDate) return [];
-    const digerleri = Object.entries(filters).filter(([k, s]) => k !== acikCol.key && s.size > 0);
+    const digerleri = Object.entries(filters).filter(([k]) => k !== acikCol.key);
     const digerTarihler = Object.entries(dateFilters).filter(([k, r]) => k !== acikCol.key && (r.from || r.to));
     const satirlar = data.filter(
       (row) =>
@@ -173,8 +178,8 @@ export default function DataTable<T>({
 
   const gorunenSecenekler = useMemo(() => {
     if (!filtreArama.trim()) return filtreSecenekleri;
-    const q = filtreArama.toLowerCase();
-    return filtreSecenekleri.filter((o) => o.value.toLowerCase().includes(q));
+    const q = trLower(filtreArama);
+    return filtreSecenekleri.filter((o) => trLower(o.value).includes(q));
   }, [filtreSecenekleri, filtreArama]);
 
   function filtreAcKapa(key: string, e: React.MouseEvent<HTMLButtonElement>) {
@@ -192,31 +197,48 @@ export default function DataTable<T>({
 
   function secimIsaretliMi(key: string, value: string): boolean {
     const set = filters[key];
-    return !set || set.size === 0 ? true : set.has(value);
+    return set === undefined ? true : set.has(value);
   }
 
   function degerToggle(key: string, value: string) {
     const tumDegerler = filtreSecenekleri.map((o) => o.value);
     setFilters((prev) => {
       const cur = prev[key];
-      let next: Set<string>;
-      if (!cur || cur.size === 0) {
+      const next = cur === undefined
         // Filtre yokken bir değeri kaldırmak = diğer tüm değerler seçili kalır
-        next = new Set(tumDegerler.filter((v) => v !== value));
-      } else {
-        next = new Set(cur);
+        ? new Set(tumDegerler.filter((v) => v !== value))
+        : new Set(cur);
+      if (cur !== undefined) {
         if (next.has(value)) next.delete(value);
         else next.add(value);
-        // Tüm değerler yeniden seçildiyse filtre etkisiz hale gelir
-        if (next.size >= tumDegerler.length && tumDegerler.every((v) => next.has(v))) next = new Set();
+      }
+      // Tüm değerler yeniden seçildiyse filtre tamamen kaldırılır
+      if (next.size >= tumDegerler.length && tumDegerler.every((v) => next.has(v))) {
+        const { [key]: _kaldirilan, ...rest } = prev;
+        return rest;
       }
       return { ...prev, [key]: next };
     });
     setPage(1);
   }
 
+  /** "Tümünü Seç" tik'i: işaretliyse hepsini kaldırır, değilse hepsini seçer. */
+  function tumunuSecToggle(key: string) {
+    setFilters((prev) => {
+      if (key in prev) {
+        const { [key]: _kaldirilan, ...rest } = prev;
+        return rest; // filtre yok = tümü seçili
+      }
+      return { ...prev, [key]: new Set<string>() }; // boş küme = hiçbiri seçili değil
+    });
+    setPage(1);
+  }
+
   function sutunFiltreTemizle(key: string) {
-    setFilters((prev) => ({ ...prev, [key]: new Set() }));
+    setFilters((prev) => {
+      const { [key]: _kaldirilan, ...rest } = prev;
+      return rest;
+    });
     setDateFilters((prev) => ({ ...prev, [key]: { from: "", to: "" } }));
     setPage(1);
   }
@@ -267,7 +289,7 @@ export default function DataTable<T>({
 
   const py = compact ? "py-2.5" : "py-3.5";
   const aktifFiltreSayisi =
-    Object.values(filters).filter((s) => s.size > 0).length +
+    Object.keys(filters).length +
     Object.values(dateFilters).filter((r) => r.from || r.to).length;
 
   return (
@@ -342,7 +364,7 @@ export default function DataTable<T>({
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
                 {columns.map((col) => {
                   const filtreAktif =
-                    (filters[col.key]?.size ?? 0) > 0 ||
+                    filters[col.key] !== undefined ||
                     !!(dateFilters[col.key]?.from || dateFilters[col.key]?.to);
                   const filtreButonu = col.filterValue || col.filterDate ? (
                     <button
@@ -465,13 +487,13 @@ export default function DataTable<T>({
                   <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={(filters[acikFiltre.key]?.size ?? 0) === 0}
-                      onChange={() => sutunFiltreTemizle(acikFiltre.key)}
+                      checked={filters[acikFiltre.key] === undefined}
+                      onChange={() => tumunuSecToggle(acikFiltre.key)}
                       className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                     Tümünü Seç
                   </label>
-                  {(filters[acikFiltre.key]?.size ?? 0) > 0 && (
+                  {filters[acikFiltre.key] !== undefined && (
                     <button
                       onClick={() => sutunFiltreTemizle(acikFiltre.key)}
                       className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
