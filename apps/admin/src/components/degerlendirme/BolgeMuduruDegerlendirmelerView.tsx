@@ -186,19 +186,9 @@ export default function BolgeMuduruDegerlendirmelerView() {
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300 text-xs">—</span>;
         const yuzde = d.maxPuan && d.maxPuan > 0 ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
         return (
-          <div className="flex flex-col items-center gap-0.5">
-            <span className={`text-xs font-bold ${yuzde !== null ? (yuzde >= 80 ? "text-emerald-600" : yuzde >= 50 ? "text-amber-500" : "text-red-500") : "text-slate-500"}`}>
-              {yuzde !== null ? `%${yuzde}` : `${d.toplamPuan}p`}
-            </span>
-            {yuzde !== null && (
-              <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${yuzde >= 80 ? "bg-emerald-500" : yuzde >= 50 ? "bg-amber-400" : "bg-red-400"}`}
-                  style={{ width: `${yuzde}%` }}
-                />
-              </div>
-            )}
-          </div>
+          <span className={`text-xs font-bold ${yuzde !== null ? (yuzde >= 80 ? "text-emerald-600" : yuzde >= 50 ? "text-amber-500" : "text-red-500") : "text-slate-500"}`}>
+            {d.toplamPuan}
+          </span>
         );
       },
     },

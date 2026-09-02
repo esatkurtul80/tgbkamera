@@ -177,19 +177,9 @@ function KameramanDegerlendirmelerView() {
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300 text-xs">—</span>;
         const yuzde = d.maxPuan && d.maxPuan > 0 ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
         return (
-          <div className="flex flex-col items-center gap-0.5">
-            <span className={`text-xs font-bold ${yuzde !== null ? (yuzde >= 80 ? "text-emerald-600" : yuzde >= 50 ? "text-amber-500" : "text-red-500") : "text-slate-500"}`}>
-              {yuzde !== null ? `%${yuzde}` : `${d.toplamPuan}p`}
-            </span>
-            {yuzde !== null && (
-              <div className="w-12 h-1 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${yuzde >= 80 ? "bg-emerald-500" : yuzde >= 50 ? "bg-amber-400" : "bg-red-400"}`}
-                  style={{ width: `${yuzde}%` }}
-                />
-              </div>
-            )}
-          </div>
+          <span className={`text-xs font-bold ${yuzde !== null ? (yuzde >= 80 ? "text-emerald-600" : yuzde >= 50 ? "text-amber-500" : "text-red-500") : "text-slate-500"}`}>
+            {d.toplamPuan}
+          </span>
         );
       },
     },
@@ -584,26 +574,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       sortValue: (d) => d.toplamPuan ?? -1,
       cell: (d) => {
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300">—</span>;
-        const yuzde =
-          d.maxPuan && d.maxPuan > 0 ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
-        return (
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-sm font-semibold text-slate-800">
-              {yuzde !== null ? `${d.toplamPuan} / ${d.maxPuan}` : d.toplamPuan}
-            </span>
-            {yuzde !== null && (
-              <div className="flex items-center gap-1.5 w-full max-w-[80px]">
-                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${yuzde >= 80 ? "bg-emerald-500" : yuzde >= 50 ? "bg-amber-400" : "bg-red-400"}`}
-                    style={{ width: `${yuzde}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-semibold text-slate-500 shrink-0">%{yuzde}</span>
-              </div>
-            )}
-          </div>
-        );
+        return <span className="text-sm font-semibold text-slate-800">{d.toplamPuan}</span>;
       },
     },
     {
