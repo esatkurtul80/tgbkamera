@@ -7,12 +7,9 @@ import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import {
   getDegerlendirmeler,
-  getFormlar,
-  getPersoneller,
-  getMagazalar,
   softDeleteDegerlendirme,
 } from "@/lib/firestore";
-import type { Degerlendirme, Form, Personel, Magaza } from "@/types";
+import type { Degerlendirme } from "@/types";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import BolgeMuduruDegerlendirmelerView from "@/components/degerlendirme/BolgeMuduruDegerlendirmelerView";
@@ -334,12 +331,6 @@ function devamEdiyorMu(d: Degerlendirme): boolean {
 export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", kategori }: { baslik?: string; kategori?: DegerlendirmeKategori } = {}) {
   const { user, kullanici } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
-  const [formlar, setFormlar] = useState<Form[]>([]);
-  const [personeller, setPersoneller] = useState<Personel[]>([]);
-  const [magazalar, setMagazalar] = useState<Magaza[]>([]);
-  const [filtrePersonel, setFiltrePersonel] = useState("");
-  const [filtreForm, setFiltreForm] = useState("");
-  const [filtreMagaza, setFiltreMagaza] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [silId, setSilId] = useState<string | null>(null);
@@ -397,37 +388,11 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
   }, [kategori]);
 
   useEffect(() => {
-    Promise.all([getDegerlendirmeler(), getFormlar(), getPersoneller(), getMagazalar()]).then(
-      ([d, f, p, m]) => {
-        setListe(hazirla(d));
-        setFormlar(f);
-        setPersoneller(p);
-        setMagazalar(m);
-        setLoading(false);
-      }
-    );
+    getDegerlendirmeler().then((d) => {
+      setListe(hazirla(d));
+      setLoading(false);
+    });
   }, [hazirla]);
-
-  async function applyFilter() {
-    setLoading(true);
-    setSecilenler(new Set());
-    const filters: Parameters<typeof getDegerlendirmeler>[0] = {};
-    if (filtrePersonel) filters.personelId = filtrePersonel;
-    else if (filtreMagaza) filters.magazaId = filtreMagaza;
-    else if (filtreForm) filters.formId = filtreForm;
-    setListe(hazirla(await getDegerlendirmeler(filters)));
-    setLoading(false);
-  }
-
-  async function clearFilter() {
-    setFiltrePersonel("");
-    setFiltreForm("");
-    setFiltreMagaza("");
-    setSecilenler(new Set());
-    setLoading(true);
-    setListe(hazirla(await getDegerlendirmeler()));
-    setLoading(false);
-  }
 
   async function handleSil() {
     if (!silId || !user) return;
@@ -449,7 +414,6 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     setSiliyor(false);
   }
 
-  const hasFilter = filtrePersonel || filtreForm || filtreMagaza;
   const acikSayisi = liste.filter(devamEdiyorMu).length;
 
   const columns: DataColumn<Degerlendirme>[] = [
@@ -482,6 +446,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: "Durum" as React.ReactNode,
       width: "140px",
       sortValue: (d: Degerlendirme) => (devamEdiyorMu(d) ? 1 : 0),
+      filterValue: (d: Degerlendirme) => (devamEdiyorMu(d) ? "Devam Ediyor" : "Tamamlandı"),
       cell: (d: Degerlendirme) =>
         devamEdiyorMu(d) ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full whitespace-nowrap">
@@ -501,6 +466,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       width: "130px",
       sortValue: (d) => d.izlenmeTarihi?.seconds ?? 0,
       searchValue: () => "",
+      filterValue: (d) => d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—",
       cell: (d) => (
         <span className="text-sm text-slate-500 whitespace-nowrap">
           {d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
@@ -512,6 +478,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: "Personel",
       searchValue: (d) => d.personelAd,
       sortValue: (d) => d.personelAd,
+      filterValue: (d) => d.personelAd,
       cell: (d) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
@@ -528,6 +495,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: "Mağaza",
       searchValue: (d) => d.magazaAd ?? "",
       sortValue: (d) => d.magazaAd ?? "",
+      filterValue: (d) => d.magazaAd ?? "—",
       cell: (d) =>
         d.magazaAd ? (
           <span className="inline-flex items-center gap-1 text-xs text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-medium">
@@ -542,6 +510,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: "Kamera Gözlem",
       searchValue: (d) => d.kameramanAd ?? "",
       sortValue: (d) => d.kameramanAd ?? "",
+      filterValue: (d) => d.kameramanAd ?? "—",
       cell: (d) =>
         d.kameramanAd ? (
           <span className="inline-flex items-center gap-1.5 text-xs text-violet-700 bg-violet-50 px-2 py-0.5 rounded font-medium">
@@ -556,6 +525,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: "Form",
       searchValue: (d) => d.formAd,
       sortValue: (d) => d.formAd,
+      filterValue: (d) => d.formAd,
       cell: (d) => <span className="text-sm text-slate-600">{d.formAd}</span>,
     },
     {
@@ -564,6 +534,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       align: "center",
       width: "90px",
       sortValue: (d) => (d.puanli ? 1 : 0),
+      filterValue: (d) => (d.puanli ? "Puanlı" : "Puansız"),
       cell: (d) => <Badge variant={d.puanli ? "puanli" : "puansiz"} />,
     },
     {
@@ -634,73 +605,6 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     },
   ];
 
-  const filterToolbar = (
-    <div className="flex items-center gap-2 flex-wrap">
-      <select
-        value={filtrePersonel}
-        onChange={(e) => {
-          setFiltrePersonel(e.target.value);
-          setFiltreMagaza("");
-          setFiltreForm("");
-        }}
-        className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-      >
-        <option value="">Tüm Personel</option>
-        {personeller.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.ad}
-          </option>
-        ))}
-      </select>
-      <select
-        value={filtreMagaza}
-        onChange={(e) => {
-          setFiltreMagaza(e.target.value);
-          setFiltrePersonel("");
-          setFiltreForm("");
-        }}
-        className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-      >
-        <option value="">Tüm Mağazalar</option>
-        {magazalar.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.ad}
-          </option>
-        ))}
-      </select>
-      <select
-        value={filtreForm}
-        onChange={(e) => {
-          setFiltreForm(e.target.value);
-          setFiltrePersonel("");
-          setFiltreMagaza("");
-        }}
-        className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-      >
-        <option value="">Tüm Formlar</option>
-        {formlar.filter((f) => kategoriUygunMu(f, kategori)).map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.ad}
-          </option>
-        ))}
-      </select>
-      <button
-        onClick={applyFilter}
-        className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-      >
-        Filtrele
-      </button>
-      {hasFilter && (
-        <button
-          onClick={clearFilter}
-          className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Temizle
-        </button>
-      )}
-    </div>
-  );
-
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -749,12 +653,11 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         columns={columns}
         rowKey={(d) => d.id}
         loading={loading}
-        searchPlaceholder="Personel, kamera gözlem veya form ara..."
+        showSearch={false}
         emptyIcon={ClipboardList}
         emptyTitle="Değerlendirme bulunamadı"
         emptyDescription="Yeni raporlar Panelim sayfasında mağaza seçilip personel üzerinden başlatılır."
         defaultPageSize={25}
-        toolbar={filterToolbar}
       />
 
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
