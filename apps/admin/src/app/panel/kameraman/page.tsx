@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { TrendingUp, CalendarDays, Store, Search, Users, UserPlus, UserMinus, Play, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Star, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getBolgeler, updateKullaniciFavoriMagazalar } from "@/lib/firestore";
@@ -30,7 +29,6 @@ function StatKart({ icon: Icon, title, value, renk }: {
 }
 
 export default function KameramanPaneliPage() {
-  const router = useRouter();
   const { user, kullanici } = useAuth();
   const [degerlendirmeler, setDegerlendirmeler] = useState<Degerlendirme[]>([]);
   const [stats, setStats] = useState<KameramanStats | null>(null);
@@ -222,7 +220,8 @@ export default function KameramanPaneliPage() {
   const handleFormSec = (formId: string) => {
     if (!raporModalPersonel || !activeMagaza) return;
     setRaporModalPersonel(null);
-    router.push(`/degerlendirmeler/yeni?magazaId=${activeMagaza.id}&personelId=${raporModalPersonel.id}&formId=${formId}`);
+    // Raporlama yeni sekmede açılır; panel (mağaza/personel listesi) olduğu gibi kalır.
+    window.open(`/degerlendirmeler/yeni?magazaId=${activeMagaza.id}&personelId=${raporModalPersonel.id}&formId=${formId}`, "_blank");
   };
 
   // Mağaza → Bölge Müdürü çözümlemesi: bu organizasyonda her "Bölge" kaydı,
@@ -756,7 +755,7 @@ export default function KameramanPaneliPage() {
                         key={r.id}
                         onClick={() => {
                           setRaporModalPersonel(null);
-                          router.push(`/degerlendirmeler/yeni?devam=${r.id}`);
+                          window.open(`/degerlendirmeler/yeni?devam=${r.id}`, "_blank");
                         }}
                         className="w-full text-left p-4 hover:bg-amber-50 transition-colors flex items-center justify-between group"
                       >
