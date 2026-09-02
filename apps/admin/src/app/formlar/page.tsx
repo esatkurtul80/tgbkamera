@@ -40,6 +40,7 @@ export default function FormlarPage() {
   const [yeniPuanli, setYeniPuanli] = useState(true);
   const [yeniPuanGirisTipi, setYeniPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [yeniSkorlamaSistemi, setYeniSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
+  const [yeniMagazaFormu, setYeniMagazaFormu] = useState(false);
   const [yeniBolumler, setYeniBolumler] = useState<Bolum[]>([]);
   const [yeniSorularById, setYeniSorularById] = useState<Record<string, Soru>>({});
   const [yeniSeciliIds, setYeniSeciliIds] = useState<string[]>([]);
@@ -60,6 +61,7 @@ export default function FormlarPage() {
   const [editPuanli, setEditPuanli] = useState(true);
   const [editPuanGirisTipi, setEditPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [editSkorlamaSistemi, setEditSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
+  const [editMagazaFormu, setEditMagazaFormu] = useState(false);
   const [editBolumler, setEditBolumler] = useState<Bolum[]>([]);
   const [editSorularById, setEditSorularById] = useState<Record<string, Soru>>({});
   const [editSeciliIds, setEditSeciliIds] = useState<string[]>([]);
@@ -77,6 +79,7 @@ export default function FormlarPage() {
 
   async function openYeni() {
     setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniPuanGirisTipi("otomatik"); setYeniSkorlamaSistemi("esik");
+    setYeniMagazaFormu(false);
     setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
     const [b, sorular] = await Promise.all([getBolumler(), getSorular()]);
     setYeniBolumler(b);
@@ -97,6 +100,7 @@ export default function FormlarPage() {
         puanli: yeniPuanli,
         puanGirisTipi: yeniPuanli ? yeniPuanGirisTipi : undefined,
         skorlamaSistemi: yeniPuanli && yeniPuanGirisTipi !== "manuel" ? yeniSkorlamaSistemi : undefined,
+        magazaFormu: yeniMagazaFormu,
         bolumIdleri: yeniSeciliIds,
       });
       setYeniAcik(false);
@@ -131,6 +135,7 @@ export default function FormlarPage() {
       setEditAd(f.ad); setEditAciklama(f.aciklama); setEditPuanli(f.puanli);
       setEditPuanGirisTipi(f.puanGirisTipi ?? "otomatik");
       setEditSkorlamaSistemi(f.skorlamaSistemi ?? "esik");
+      setEditMagazaFormu(f.magazaFormu ?? false);
       setEditSeciliIds(f.bolumIdleri);
     }
     setEditBolumler(tumBolumler);
@@ -151,6 +156,7 @@ export default function FormlarPage() {
         puanli: editPuanli,
         puanGirisTipi: editPuanli ? editPuanGirisTipi : undefined,
         skorlamaSistemi: editPuanli && editPuanGirisTipi !== "manuel" ? editSkorlamaSistemi : undefined,
+        magazaFormu: editMagazaFormu,
         bolumIdleri: editSeciliIds,
       });
       setEditId(null);
@@ -301,7 +307,16 @@ export default function FormlarPage() {
               {filtrelenmis.map((form, i) => (
                 <tr key={form.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="px-4 py-3.5 text-sm text-slate-400 tabular-nums">{i + 1}</td>
-                  <td className="px-4 py-3.5 text-sm font-medium text-slate-800">{form.ad}</td>
+                  <td className="px-4 py-3.5 text-sm font-medium text-slate-800">
+                    <span className="inline-flex items-center gap-2">
+                      {form.ad}
+                      {form.magazaFormu && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-50 text-teal-700 whitespace-nowrap">
+                          Mağaza Formu
+                        </span>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-4 py-3.5 text-sm text-slate-500 truncate max-w-xs">
                     {form.aciklama || <span className="text-slate-300">—</span>}
                   </td>
@@ -367,6 +382,21 @@ export default function FormlarPage() {
           {yeniPuanli && yeniPuanGirisTipi !== "manuel" && (
             <SkorlamaSecimi value={yeniSkorlamaSistemi} onChange={setYeniSkorlamaSistemi} />
           )}
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={yeniMagazaFormu}
+              onChange={(e) => setYeniMagazaFormu(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-700">Mağaza Formu</span>
+              <span className="block text-xs text-slate-400 mt-0.5">
+                İşaretlenirse bu form yalnız mağaza raporlamasında ("Mağaza Raporla" akışı) listelenir;
+                personel raporlama form listelerinde görünmez.
+              </span>
+            </span>
+          </label>
           <BolumSecimListesi bolumler={yeniBolumler} sorularById={yeniSorularById} seciliIds={yeniSeciliIds}
             formGerekliSinif={formGerekliSinif(yeniPuanli, yeniPuanGirisTipi)}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
@@ -392,6 +422,11 @@ export default function FormlarPage() {
               <Badge variant={formTipBadge(detayForm)} />
               {detayForm.puanli && detayForm.skorlamaSistemi && (
                 <Badge variant={detayForm.skorlamaSistemi} />
+              )}
+              {detayForm.magazaFormu && (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700">
+                  Mağaza Formu
+                </span>
               )}
               {detayForm.aciklama && <p className="text-sm text-slate-500 ml-1">{detayForm.aciklama}</p>}
             </div>
@@ -467,6 +502,21 @@ export default function FormlarPage() {
             {editPuanli && editPuanGirisTipi !== "manuel" && (
               <SkorlamaSecimi value={editSkorlamaSistemi} onChange={setEditSkorlamaSistemi} />
             )}
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={editMagazaFormu}
+                onChange={(e) => setEditMagazaFormu(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-700">Mağaza Formu</span>
+                <span className="block text-xs text-slate-400 mt-0.5">
+                  İşaretlenirse bu form yalnız mağaza raporlamasında ("Mağaza Raporla" akışı) listelenir;
+                  personel raporlama form listelerinde görünmez.
+                </span>
+              </span>
+            </label>
             <BolumSecimListesi bolumler={editBolumler} sorularById={editSorularById} seciliIds={editSeciliIds}
               formGerekliSinif={formGerekliSinif(editPuanli, editPuanGirisTipi)}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
