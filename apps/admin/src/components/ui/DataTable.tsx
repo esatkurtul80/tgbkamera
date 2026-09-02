@@ -38,6 +38,9 @@ interface DataTableProps<T> {
   defaultPageSize?: number;
   toolbar?: React.ReactNode;
   compact?: boolean;
+  /** Bir tarih sütununun aralık filtresi uygulanınca/temizlenince çağrılır —
+   *  üst bileşen sunucudan yalnız o aralığı çekmek için kullanabilir. */
+  onDateFilterChange?: (key: string, range: { from: string; to: string }) => void;
 }
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -72,6 +75,7 @@ export default function DataTable<T>({
   defaultPageSize = 10,
   toolbar,
   compact = false,
+  onDateFilterChange,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -250,6 +254,7 @@ export default function DataTable<T>({
     const key = acikFiltre.key;
     if (acikCol?.filterDate) {
       setDateFilters((prev) => ({ ...prev, [key]: taslakTarih }));
+      onDateFilterChange?.(key, taslakTarih);
     } else {
       const tumDegerler = filtreSecenekleri.map((o) => o.value);
       setFilters((prev) => {
@@ -273,13 +278,18 @@ export default function DataTable<T>({
       const { [key]: _kaldirilan, ...rest } = prev;
       return rest;
     });
+    const tarihAktifti = !!(dateFilters[key]?.from || dateFilters[key]?.to);
     setDateFilters((prev) => ({ ...prev, [key]: { from: "", to: "" } }));
+    if (tarihAktifti) onDateFilterChange?.(key, { from: "", to: "" });
     setAcikFiltre(null);
     setPage(1);
   }
 
   function tumFiltreleriTemizle() {
     setFilters({});
+    Object.entries(dateFilters).forEach(([key, r]) => {
+      if (r.from || r.to) onDateFilterChange?.(key, { from: "", to: "" });
+    });
     setDateFilters({});
     setAcikFiltre(null);
     setPage(1);

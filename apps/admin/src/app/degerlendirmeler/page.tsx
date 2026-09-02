@@ -7,6 +7,8 @@ import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import {
   getDegerlendirmeler,
+  getDegerlendirmelerByOlusturmaAraligi,
+  getDegerlendirmelerByIzlenmeAraligi,
   softDeleteDegerlendirme,
 } from "@/lib/firestore";
 import type { Degerlendirme } from "@/types";
@@ -328,10 +330,21 @@ function devamEdiyorMu(d: Degerlendirme): boolean {
   return d.durum === "acik" && !kategoriUygunMu(d, "puanli");
 }
 
+/** İçinde bulunulan ayın başı–sonu; liste sayfaları varsayılan olarak yalnız bu aralığı çeker. */
+function buAyAraligi(): { baslangic: Date; bitis: Date } {
+  const simdi = new Date();
+  return {
+    baslangic: new Date(simdi.getFullYear(), simdi.getMonth(), 1),
+    bitis: new Date(simdi.getFullYear(), simdi.getMonth() + 1, 0, 23, 59, 59, 999),
+  };
+}
+
 export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", kategori }: { baslik?: string; kategori?: DegerlendirmeKategori } = {}) {
   const { user, kullanici } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
+  // null = varsayılan görünüm (yalnız bu ay); doluysa izlenme tarihine göre seçili aralık
+  const [ozelAralik, setOzelAralik] = useState<{ from: string; to: string } | null>(null);
 
   const [silId, setSilId] = useState<string | null>(null);
   const [siliyor, setSiliyor] = useState(false);
@@ -388,11 +401,32 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
   }, [kategori]);
 
   useEffect(() => {
-    getDegerlendirmeler().then((d) => {
+    // Performans: açılışta tüm koleksiyon yerine yalnız içinde bulunulan ay çekilir;
+    // eski kayıtlara İzlenme Tarihi sütunundaki aralık filtresiyle ulaşılır.
+    const { baslangic, bitis } = buAyAraligi();
+    getDegerlendirmelerByOlusturmaAraligi(baslangic, bitis).then((d) => {
       setListe(hazirla(d));
       setLoading(false);
     });
   }, [hazirla]);
+
+  /** İzlenme Tarihi sütununun aralık filtresi değişince sunucudan yalnız o aralığı çeker. */
+  async function handleTarihFiltresi(_key: string, aralik: { from: string; to: string }) {
+    setLoading(true);
+    setSecilenler(new Set());
+    if (!aralik.from && !aralik.to) {
+      setOzelAralik(null);
+      const { baslangic, bitis } = buAyAraligi();
+      setListe(hazirla(await getDegerlendirmelerByOlusturmaAraligi(baslangic, bitis)));
+    } else {
+      setOzelAralik(aralik);
+      const baslangic = aralik.from ? new Date(aralik.from) : new Date(2000, 0, 1);
+      const bitis = aralik.to ? new Date(aralik.to) : new Date(2100, 0, 1);
+      bitis.setHours(23, 59, 59, 999);
+      setListe(hazirla(await getDegerlendirmelerByIzlenmeAraligi(baslangic, bitis)));
+    }
+    setLoading(false);
+  }
 
   async function handleSil() {
     if (!silId || !user) return;
@@ -610,7 +644,12 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">{baslik}</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{liste.length} kayıt</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {liste.length} kayıt ·{" "}
+            {ozelAralik
+              ? "seçili izlenme tarihi aralığı"
+              : "bu ay (eski kayıtlar için İzlenme Tarihi filtresini kullanın)"}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {acikSayisi > 0 && (
@@ -655,9 +694,10 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         loading={loading}
         showSearch={false}
         emptyIcon={ClipboardList}
-        emptyTitle="Değerlendirme bulunamadı"
-        emptyDescription="Yeni raporlar Panelim sayfasında mağaza seçilip personel üzerinden başlatılır."
+        emptyTitle="Bu ay değerlendirme bulunamadı"
+        emptyDescription="Eski kayıtlar için İzlenme Tarihi sütunundaki tarih aralığı filtresini kullanın."
         defaultPageSize={25}
+        onDateFilterChange={handleTarihFiltresi}
       />
 
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
