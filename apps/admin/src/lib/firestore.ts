@@ -495,27 +495,6 @@ export async function getDegerlendirmelerByOlusturmaAraligi(
 }
 
 /**
- * İzlenme tarihine göre aralık sorgusu — liste sayfalarında tarih filtresi
- * uygulanınca sunucudan yalnız o aralığın çekilmesi için. izlenmeTarihi alanı
- * olmayan (henüz izlenmemiş) kayıtlar bu sorguya girmez; tarih filtresi zaten
- * onları eliyor olacağından davranış tutarlıdır.
- */
-export async function getDegerlendirmelerByIzlenmeAraligi(
-  baslangic: Date,
-  bitis: Date
-): Promise<Degerlendirme[]> {
-  const snap = await getDocs(
-    query(
-      collection(db, "degerlendirmeler"),
-      where("izlenmeTarihi", ">=", Timestamp.fromDate(baslangic)),
-      where("izlenmeTarihi", "<=", Timestamp.fromDate(bitis)),
-      orderBy("izlenmeTarihi", "desc")
-    )
-  );
-  return snap.docs.map((d) => toDoc<Degerlendirme>(d));
-}
-
-/**
  * Verilen mağazaların tüm raporları — bölge müdürü kapsamı için.
  * Firestore 'in' sorgusu 10'luk parçalara bölünür (mobil firebase 9.23 ile aynı sınır);
  * parça sonuçları birleştirilip tarihe göre yeniden sıralanır (birleşim sırayı bozar).

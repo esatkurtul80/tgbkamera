@@ -8,7 +8,6 @@ import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import {
   getDegerlendirmeler,
   getDegerlendirmelerByOlusturmaAraligi,
-  getDegerlendirmelerByIzlenmeAraligi,
   softDeleteDegerlendirme,
 } from "@/lib/firestore";
 import type { Degerlendirme } from "@/types";
@@ -410,7 +409,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     });
   }, [hazirla]);
 
-  /** İzlenme Tarihi sütununun aralık filtresi değişince sunucudan yalnız o aralığı çeker. */
+  /** Rapor Oluşturma Tarihi sütununun aralık filtresi değişince sunucudan yalnız o aralığı çeker. */
   async function handleTarihFiltresi(_key: string, aralik: { from: string; to: string }) {
     setLoading(true);
     setSecilenler(new Set());
@@ -423,7 +422,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       const baslangic = aralik.from ? new Date(aralik.from) : new Date(2000, 0, 1);
       const bitis = aralik.to ? new Date(aralik.to) : new Date(2100, 0, 1);
       bitis.setHours(23, 59, 59, 999);
-      setListe(hazirla(await getDegerlendirmelerByIzlenmeAraligi(baslangic, bitis)));
+      setListe(hazirla(await getDegerlendirmelerByOlusturmaAraligi(baslangic, bitis)));
     }
     setLoading(false);
   }
@@ -495,15 +494,15 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         ),
     }]),
     {
-      key: "izlenmeTarihi",
-      header: "İzlenme Tarihi",
-      width: "130px",
-      sortValue: (d) => d.izlenmeTarihi?.seconds ?? 0,
+      key: "olusturmaTarihi",
+      header: "Rapor Oluşturma Tarihi",
+      width: "150px",
+      sortValue: (d) => d.olusturmaTarihi?.seconds ?? 0,
       searchValue: () => "",
-      filterDate: (d) => d.izlenmeTarihi?.toDate?.() ?? null,
+      filterDate: (d) => d.olusturmaTarihi?.toDate?.() ?? null,
       cell: (d) => (
         <span className="text-sm text-slate-500 whitespace-nowrap">
-          {d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
+          {d.olusturmaTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
         </span>
       ),
     },
@@ -647,8 +646,8 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
           <p className="text-sm text-slate-500 mt-0.5">
             {liste.length} kayıt ·{" "}
             {ozelAralik
-              ? "seçili izlenme tarihi aralığı"
-              : "bu ay (eski kayıtlar için İzlenme Tarihi filtresini kullanın)"}
+              ? "seçili oluşturma tarihi aralığı"
+              : "bu ay (eski kayıtlar için Rapor Oluşturma Tarihi filtresini kullanın)"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -695,7 +694,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         showSearch={false}
         emptyIcon={ClipboardList}
         emptyTitle="Bu ay değerlendirme bulunamadı"
-        emptyDescription="Eski kayıtlar için İzlenme Tarihi sütunundaki tarih aralığı filtresini kullanın."
+        emptyDescription="Eski kayıtlar için Rapor Oluşturma Tarihi sütunundaki tarih aralığı filtresini kullanın."
         defaultPageSize={25}
         onDateFilterChange={handleTarihFiltresi}
       />
