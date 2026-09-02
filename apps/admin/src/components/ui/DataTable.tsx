@@ -86,6 +86,10 @@ export default function DataTable<T>({
   const [dateFilters, setDateFilters] = useState<Record<string, { from: string; to: string }>>({});
   const [acikFiltre, setAcikFiltre] = useState<{ key: string; top: number; left: number } | null>(null);
   const [filtreArama, setFiltreArama] = useState("");
+  // Menü içi taslak: seçimler ancak "Tamam" ile filtreye uygulanır (Excel davranışı).
+  // null = tümü seçili (filtre yok).
+  const [taslakSecim, setTaslakSecim] = useState<Set<string> | null>(null);
+  const [taslakTarih, setTaslakTarih] = useState<{ from: string; to: string }>({ from: "", to: "" });
 
   const searchable = showSearch && columns.some((c) => c.searchValue);
   const hasActiveFilters =
@@ -188,6 +192,8 @@ export default function DataTable<T>({
     const r = e.currentTarget.getBoundingClientRect();
     const genislik = 264;
     setFiltreArama("");
+    setTaslakSecim(filters[key] ? new Set(filters[key]) : null);
+    setTaslakTarih(dateFilters[key] ?? { from: "", to: "" });
     setAcikFiltre({
       key,
       top: r.bottom + 6,
@@ -195,59 +201,80 @@ export default function DataTable<T>({
     });
   }
 
-  function secimIsaretliMi(key: string, value: string): boolean {
-    const set = filters[key];
-    return set === undefined ? true : set.has(value);
+  /** Menüdeki tik durumu — taslak üzerinden (Tamam'a kadar filtre değişmez). */
+  function taslakIsaretliMi(value: string): boolean {
+    return taslakSecim === null ? true : taslakSecim.has(value);
   }
 
-  function degerToggle(key: string, value: string) {
+  function taslakDegerToggle(value: string) {
     const tumDegerler = filtreSecenekleri.map((o) => o.value);
-    setFilters((prev) => {
-      const cur = prev[key];
-      const next = cur === undefined
-        // Filtre yokken bir değeri kaldırmak = diğer tüm değerler seçili kalır
-        ? new Set(tumDegerler.filter((v) => v !== value))
-        : new Set(cur);
-      if (cur !== undefined) {
-        if (next.has(value)) next.delete(value);
-        else next.add(value);
-      }
-      // Tüm değerler yeniden seçildiyse filtre tamamen kaldırılır
-      if (next.size >= tumDegerler.length && tumDegerler.every((v) => next.has(v))) {
-        const { [key]: _kaldirilan, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [key]: next };
+    setTaslakSecim((prev) => {
+      const next = prev === null ? new Set(tumDegerler) : new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
     });
+  }
+
+  // Görünen (aramayla daraltılmış) seçeneklerin tümü taslakta işaretli mi?
+  const tumGorunenlerIsaretli =
+    gorunenSecenekler.length > 0 && gorunenSecenekler.every((o) => taslakIsaretliMi(o.value));
+
+  /** "Tümünü Seç": görünen seçeneklerin hepsini işaretler / kaldırır. */
+  function taslakTumunuSecToggle() {
+    const tumDegerler = filtreSecenekleri.map((o) => o.value);
+    setTaslakSecim((prev) => {
+      const next = prev === null ? new Set(tumDegerler) : new Set(prev);
+      if (tumGorunenlerIsaretli) gorunenSecenekler.forEach((o) => next.delete(o.value));
+      else gorunenSecenekler.forEach((o) => next.add(o.value));
+      return next;
+    });
+  }
+
+  /** Arama değişince Excel gibi: eşleşenlerin tümü işaretli gelir, Tamam onları uygular. */
+  function filtreAramaDegisti(q: string) {
+    setFiltreArama(q);
+    if (q.trim()) {
+      const ql = trLower(q);
+      setTaslakSecim(
+        new Set(filtreSecenekleri.filter((o) => trLower(o.value).includes(ql)).map((o) => o.value))
+      );
+    } else if (acikFiltre) {
+      setTaslakSecim(filters[acikFiltre.key] ? new Set(filters[acikFiltre.key]) : null);
+    }
+  }
+
+  /** Tamam: taslağı gerçek filtreye uygular ve menüyü kapatır. */
+  function filtreyiUygula() {
+    if (!acikFiltre) return;
+    const key = acikFiltre.key;
+    if (acikCol?.filterDate) {
+      setDateFilters((prev) => ({ ...prev, [key]: taslakTarih }));
+    } else {
+      const tumDegerler = filtreSecenekleri.map((o) => o.value);
+      setFilters((prev) => {
+        if (
+          taslakSecim === null ||
+          (taslakSecim.size >= tumDegerler.length && tumDegerler.every((v) => taslakSecim.has(v)))
+        ) {
+          const { [key]: _kaldirilan, ...rest } = prev;
+          return rest; // tümü seçili = filtre yok
+        }
+        return { ...prev, [key]: new Set(taslakSecim) };
+      });
+    }
+    setAcikFiltre(null);
     setPage(1);
   }
 
-  /** "Tümünü Seç" tik'i: işaretliyse hepsini kaldırır, değilse hepsini seçer. */
-  function tumunuSecToggle(key: string) {
-    setFilters((prev) => {
-      if (key in prev) {
-        const { [key]: _kaldirilan, ...rest } = prev;
-        return rest; // filtre yok = tümü seçili
-      }
-      return { ...prev, [key]: new Set<string>() }; // boş küme = hiçbiri seçili değil
-    });
-    setPage(1);
-  }
-
+  /** Menüdeki Temizle: bu sütunun filtresini kaldırır ve menüyü kapatır. */
   function sutunFiltreTemizle(key: string) {
     setFilters((prev) => {
       const { [key]: _kaldirilan, ...rest } = prev;
       return rest;
     });
     setDateFilters((prev) => ({ ...prev, [key]: { from: "", to: "" } }));
-    setPage(1);
-  }
-
-  function tarihFiltreDegistir(key: string, alan: "from" | "to", deger: string) {
-    setDateFilters((prev) => {
-      const mevcut = prev[key] ?? { from: "", to: "" };
-      return { ...prev, [key]: { ...mevcut, [alan]: deger } };
-    });
+    setAcikFiltre(null);
     setPage(1);
   }
 
@@ -445,8 +472,8 @@ export default function DataTable<T>({
                   <span className="text-[11px] font-medium text-slate-500">Başlangıç</span>
                   <input
                     type="date"
-                    value={dateFilters[acikFiltre.key]?.from ?? ""}
-                    onChange={(e) => tarihFiltreDegistir(acikFiltre.key, "from", e.target.value)}
+                    value={taslakTarih.from}
+                    onChange={(e) => setTaslakTarih((t) => ({ ...t, from: e.target.value }))}
                     className="mt-1 w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
                   />
                 </label>
@@ -454,19 +481,11 @@ export default function DataTable<T>({
                   <span className="text-[11px] font-medium text-slate-500">Bitiş</span>
                   <input
                     type="date"
-                    value={dateFilters[acikFiltre.key]?.to ?? ""}
-                    onChange={(e) => tarihFiltreDegistir(acikFiltre.key, "to", e.target.value)}
+                    value={taslakTarih.to}
+                    onChange={(e) => setTaslakTarih((t) => ({ ...t, to: e.target.value }))}
                     className="mt-1 w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
                   />
                 </label>
-                {(dateFilters[acikFiltre.key]?.from || dateFilters[acikFiltre.key]?.to) && (
-                  <button
-                    onClick={() => sutunFiltreTemizle(acikFiltre.key)}
-                    className="w-full px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    Temizle
-                  </button>
-                )}
               </div>
             ) : (
               <>
@@ -477,7 +496,7 @@ export default function DataTable<T>({
                       type="text"
                       autoFocus
                       value={filtreArama}
-                      onChange={(e) => setFiltreArama(e.target.value)}
+                      onChange={(e) => filtreAramaDegisti(e.target.value)}
                       placeholder="Değer ara..."
                       className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
                     />
@@ -487,20 +506,12 @@ export default function DataTable<T>({
                   <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={filters[acikFiltre.key] === undefined}
-                      onChange={() => tumunuSecToggle(acikFiltre.key)}
+                      checked={tumGorunenlerIsaretli}
+                      onChange={taslakTumunuSecToggle}
                       className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
-                    Tümünü Seç
+                    {filtreArama.trim() ? "Tüm Arama Sonuçlarını Seç" : "Tümünü Seç"}
                   </label>
-                  {filters[acikFiltre.key] !== undefined && (
-                    <button
-                      onClick={() => sutunFiltreTemizle(acikFiltre.key)}
-                      className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
-                    >
-                      Temizle
-                    </button>
-                  )}
                 </div>
                 <div className="max-h-56 overflow-y-auto py-1">
                   {gorunenSecenekler.length === 0 ? (
@@ -513,8 +524,8 @@ export default function DataTable<T>({
                       >
                         <input
                           type="checkbox"
-                          checked={secimIsaretliMi(acikFiltre.key, o.value)}
-                          onChange={() => degerToggle(acikFiltre.key, o.value)}
+                          checked={taslakIsaretliMi(o.value)}
+                          onChange={() => taslakDegerToggle(o.value)}
                           className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
                         />
                         <span className="flex-1 truncate">{o.value}</span>
@@ -525,6 +536,28 @@ export default function DataTable<T>({
                 </div>
               </>
             )}
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-slate-100 bg-slate-50/60">
+              <button
+                onClick={() => sutunFiltreTemizle(acikFiltre.key)}
+                className="text-[11px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Temizle
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setAcikFiltre(null)}
+                  className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={filtreyiUygula}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Tamam
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}
