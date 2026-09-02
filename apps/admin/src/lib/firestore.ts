@@ -661,8 +661,10 @@ export async function getAcikDegerlendirme(
   return results[0] ?? null;
 }
 
-/** Bu ay/yıl içinde personel+mağaza için tüm açık (durum='acik') raporları döner. */
-export async function getAcikDegerlendirmeler(
+/** Bu ay/yıl içinde personel+mağaza için TÜM raporları döner (durum fark etmez).
+ *  Puanlı matris raporları baştan 'kapali' oluşturulduğu için aylık rapora devam
+ *  etme (dedupe) araması durumdan bağımsız yapılmalı. */
+export async function getAylikDegerlendirmeler(
   personelId: string,
   magazaId: string,
   ay: number,
@@ -676,56 +678,38 @@ export async function getAcikDegerlendirmeler(
     )
   );
   const docs = snap.docs.map((d) => toDoc<Degerlendirme>(d));
-  return docs.filter(
-    (d) =>
-      d.magazaId === magazaId &&
-      d.ay === ay &&
-      d.yil === yil &&
-      d.durum === "acik"
-  );
+  return docs.filter((d) => d.magazaId === magazaId && d.ay === ay && d.yil === yil);
+}
+
+/** Bu ay/yıl içinde personel+mağaza için tüm açık (durum='acik') raporları döner. */
+export async function getAcikDegerlendirmeler(
+  personelId: string,
+  magazaId: string,
+  ay: number,
+  yil: number
+): Promise<Degerlendirme[]> {
+  const docs = await getAylikDegerlendirmeler(personelId, magazaId, ay, yil);
+  return docs.filter((d) => d.durum === "acik");
+}
+
+/** Raporun durumunu günceller — eskiden 'acik' kalmış puanlı matris raporlarını kapatmak için. */
+export async function setDegerlendirmeDurum(id: string, durum: "acik" | "kapali"): Promise<void> {
+  await updateDoc(doc(db, "degerlendirmeler", id), { durum, guncellemeTarihi: serverTimestamp() });
 }
 
 /**
- * Açık bir raporun izlenmelerini ve puanını gerçek zamanlı günceller.
- * `kameraman` verilirse (canlı raporlama akışından çağrıldığında), raporu o an
- * kaydeden kişi olarak kameramanId/Ad de güncellenir — böylece açık bir raporu
- * başka bir kameraman devam ettirirse üstte onun adı görünür. Admin'in "düzenle"
- * ekranından yapılan düzeltmelerde bu parametre verilmemeli (kim izlediği değişmez).
+ * Bir raporun izlenmelerini ve puanını gerçek zamanlı günceller.
+ * Rapor sahibi (kameramanId/Ad) ilk oluşturan kişide sabit kalır — günü kimin
+ * işaretlediği izlenme bazında kaydedenId/kaydedenAd alanlarında tutulur.
  */
 export async function updateDegerlendirmeIzlenmeler(
   id: string,
   izlenmeler: SoruIzlenme[],
   toplamPuan: number | null,
-  maxPuan: number | null,
-  kameraman?: { id: string; ad: string }
+  maxPuan: number | null
 ): Promise<void> {
   await updateDoc(doc(db, "degerlendirmeler", id), {
-    ...cleanData({
-      izlenmeler,
-      toplamPuan,
-      maxPuan,
-      ...(kameraman ? { kameramanId: kameraman.id, kameramanAd: kameraman.ad } : {}),
-    }),
-    guncellemeTarihi: serverTimestamp(),
-  });
-}
-
-/** Raporu kapatır: izlenmeler + puan kaydeder ve durum'u 'kapali' yapar. `kameraman` bkz. updateDegerlendirmeIzlenmeler. */
-export async function finalizeDegerlendirme(
-  id: string,
-  izlenmeler: SoruIzlenme[],
-  toplamPuan: number | null,
-  maxPuan: number | null,
-  kameraman?: { id: string; ad: string }
-): Promise<void> {
-  await updateDoc(doc(db, "degerlendirmeler", id), {
-    ...cleanData({
-      izlenmeler,
-      toplamPuan,
-      maxPuan,
-      ...(kameraman ? { kameramanId: kameraman.id, kameramanAd: kameraman.ad } : {}),
-    }),
-    durum: "kapali",
+    ...cleanData({ izlenmeler, toplamPuan, maxPuan }),
     guncellemeTarihi: serverTimestamp(),
   });
 }

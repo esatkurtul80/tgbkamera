@@ -38,6 +38,53 @@ function normalizeMagazaAdi(s: string): string {
   return s.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
 }
 
+// Türkçe harf duyarlı, büyük/küçük harften bağımsız arama (İ/i, I/ı, Ş, Ğ, Ü, Ö, Ç)
+function trIceriyor(metin: string, aranan: string): boolean {
+  return metin.toLocaleLowerCase("tr-TR").includes(aranan.toLocaleLowerCase("tr-TR"));
+}
+
+// PersonelPage'in DIŞINDA tanımlı olmalı: içeride tanımlanırsa her render'da
+// bileşen tipi yeniden yaratılır, React alt ağacı unmount/mount eder ve
+// filtre input'u her tuş vuruşunda odağını kaybeder.
+function MagazaCheckList({ magazalar, seciliIds, onToggle, araVal, onAraChange }: {
+  magazalar: Magaza[]; seciliIds: string[]; onToggle: (id: string) => void; araVal: string; onAraChange: (v: string) => void;
+}) {
+  const filtreli = magazalar.filter((m) => trIceriyor(m.ad, araVal));
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium text-slate-700">Mağaza Ata <span className="text-slate-400 font-normal">({seciliIds.filter(id => magazalar.some(m => m.id === id)).length} seçili)</span></p>
+        {magazalar.length > 4 && (
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
+              className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
+          </div>
+        )}
+      </div>
+      {magazalar.length === 0 ? (
+        <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz mağaza yok. Önce mağaza oluşturun.</p>
+      ) : (
+        <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
+          {filtreli.map((m) => {
+            const secili = seciliIds.includes(m.id);
+            return (
+              <button key={m.id} type="button" onClick={() => onToggle(m.id)}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-teal-50" : "hover:bg-slate-50"}`}>
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-teal-600 border-teal-600" : "border-slate-300"}`}>
+                  {secili && <Check size={10} className="text-white" />}
+                </div>
+                <Store size={13} className={secili ? "text-teal-600" : "text-slate-400"} />
+                <span className={`flex-1 text-sm ${secili ? "text-teal-700 font-medium" : "text-slate-700"}`}>{m.ad}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PersonelPage() {
   const { kullanici } = useAuth();
   const [personeller, setPersoneller] = useState<Personel[]>([]);
@@ -230,45 +277,6 @@ export default function PersonelPage() {
   const topluCakisanlar = topluSatirlar.filter((s) => !s.magazaId);
   const topluEslesenler = topluSatirlar.filter((s) => s.magazaId);
 
-  function MagazaCheckList({ seciliIds, onToggle, araVal, onAraChange }: {
-    seciliIds: string[]; onToggle: (id: string) => void; araVal: string; onAraChange: (v: string) => void;
-  }) {
-    const filtreli = magazalar.filter((m) => m.ad.toLowerCase().includes(araVal.toLowerCase()));
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-slate-700">Mağaza Ata <span className="text-slate-400 font-normal">({seciliIds.filter(id => magazalar.some(m => m.id === id)).length} seçili)</span></p>
-          {magazalar.length > 4 && (
-            <div className="relative">
-              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Filtrele..." value={araVal} onChange={(e) => onAraChange(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 w-36" />
-            </div>
-          )}
-        </div>
-        {magazalar.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4 text-center border border-slate-100 rounded-lg">Henüz mağaza yok. Önce mağaza oluşturun.</p>
-        ) : (
-          <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
-            {filtreli.map((m) => {
-              const secili = seciliIds.includes(m.id);
-              return (
-                <button key={m.id} type="button" onClick={() => onToggle(m.id)}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 text-left transition-colors ${secili ? "bg-teal-50" : "hover:bg-slate-50"}`}>
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${secili ? "bg-teal-600 border-teal-600" : "border-slate-300"}`}>
-                    {secili && <Check size={10} className="text-white" />}
-                  </div>
-                  <Store size={13} className={secili ? "text-teal-600" : "text-slate-400"} />
-                  <span className={`flex-1 text-sm ${secili ? "text-teal-700 font-medium" : "text-slate-700"}`}>{m.ad}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   const columns: DataColumn<Personel>[] = [
     {
       key: "ad",
@@ -402,7 +410,7 @@ export default function PersonelPage() {
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
           {(magazalar.length > 0) && (
-            <MagazaCheckList seciliIds={yeniMagazaIds}
+            <MagazaCheckList magazalar={magazalar} seciliIds={yeniMagazaIds}
               onToggle={(id) => setYeniMagazaIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
               araVal={yeniMagazaAra} onAraChange={setYeniMagazaAra} />
           )}
@@ -432,7 +440,7 @@ export default function PersonelPage() {
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             {(magazalar.length > 0) && (
-              <MagazaCheckList seciliIds={editMagazaIds}
+              <MagazaCheckList magazalar={magazalar} seciliIds={editMagazaIds}
                 onToggle={(id) => setEditMagazaIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
                 araVal={editMagazaAra} onAraChange={setEditMagazaAra} />
             )}

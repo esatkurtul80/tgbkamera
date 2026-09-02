@@ -93,13 +93,11 @@ export default function PuansizDegerlendirmeFormu({
     autoSaveRef.current = setTimeout(() => {
       setSenkronBekliyor(true);
       const tarih = new Date(izlenmeTarihi + "T12:00:00");
-      // Bu raporu şu an kaydeden kameraman olarak işaretlenir — açık bir raporu
-      // başka bir kameraman devam ettirirse üstte onun adı görünsün diye.
+      // Rapor sahibi (kameramanId/Ad) ilk oluşturan kişide sabit kalır —
+      // devam eden raporu başka biri sürdürse de sahiplik değişmez.
       updateDegerlendirme(mevcutId, {
         puansizCevaplar,
         izlenmeTarihi: Timestamp.fromDate(tarih),
-        kameramanId,
-        kameramanAd,
       })
         .then(() => setSenkronBekliyor(false))
         .catch((err) => {
@@ -248,6 +246,7 @@ export default function PuansizDegerlendirmeFormu({
 
       if (mevcutId) {
         // Devam edilen açık rapor: mevcut kaydı güncelle ve kapat
+        // (rapor sahibi kameramanId/Ad ilk oluşturan kişide sabit kalır)
         await updateDegerlendirme(mevcutId, {
           bolumSnapshot,
           soruSnapshot,
@@ -257,8 +256,6 @@ export default function PuansizDegerlendirmeFormu({
           puanGirisTipi: form.puanGirisTipi,
           toplamPuan,
           maxPuan: null,
-          kameramanId,
-          kameramanAd,
         });
         router.push(`/degerlendirmeler/${mevcutId}`);
       } else {

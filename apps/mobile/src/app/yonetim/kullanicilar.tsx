@@ -10,7 +10,7 @@ const ROLLER: { id: KullaniciRol; ad: string }[] = [
   { id: 'sirketsahibi', ad: 'Şirket Sahibi' },
   { id: 'ust_yonetici', ad: 'Üst Düzey Yönetici' },
   { id: 'bolge_muduru', ad: 'Bölge Müdürü' },
-  { id: 'magaza_sorumlusu', ad: 'Mağaza Sorumlusu' },
+  { id: 'magaza_sorumlusu', ad: 'Mağaza' },
   { id: 'kameraman', ad: 'Kameraman' },
 ];
 const rolAdi = (r: KullaniciRol) => ROLLER.find((x) => x.id === r)?.ad ?? r;

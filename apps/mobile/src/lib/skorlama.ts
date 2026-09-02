@@ -48,18 +48,20 @@ export function hesaplaPuanFromIzlenmeler(
   soruSnapshot: Record<string, SoruSnapshot>,
   skorlamaSistemi: SkorlamaSistemi
 ): { toplamPuan: number; maxPuan: number } {
-  let toplamPuan = 0;
-  let maxPuan = 0;
+  let kazanilan = 0;
+  let cevaplananMax = 0;
 
   for (const [soruId, soru] of Object.entries(soruSnapshot)) {
     const sonuc = soruPuanHesapla(soruId, soru, izlenmeler, skorlamaSistemi);
     if (sonuc.toplamIzlenme > 0) {
-      maxPuan += soru.puan;
-      toplamPuan += sonuc.kazanilanPuan;
+      cevaplananMax += soru.puan;
+      kazanilan += sonuc.kazanilanPuan;
     }
   }
 
-  return { toplamPuan, maxPuan };
+  // Puan her zaman 100 üzerinden normalize edilir (weble aynı): 35/50 → 70/100.
+  if (cevaplananMax === 0) return { toplamPuan: 0, maxPuan: 0 };
+  return { toplamPuan: Math.round((kazanilan / cevaplananMax) * 100), maxPuan: 100 };
 }
 
 // ─── Eski: Tek Değerlendirme Puanı (Legacy) ──────────────────────────────────

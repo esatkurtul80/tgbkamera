@@ -368,14 +368,13 @@ function YeniDegerlendirmeIcerik() {
             return [soruId, { ...cevap, fotograflar: yuklenenler }] as const;
           })
         );
+        // Rapor sahibi (kameramanId/Ad) ilk oluşturan kişide sabit kalır
         await updatePuansizDegerlendirme(devamDegId, {
           puansizCevaplar: Object.fromEntries(entries),
           izlenmeTarihi: Timestamp.fromDate(new Date(izlenmeTarihi + 'T12:00:00')),
           toplamPuan: isManuelPuan ? Number(toplamPuanGiris) : null,
           maxPuan: null,
           durum: 'kapali',
-          kameramanId: user.uid,
-          kameramanAd: kullanici?.displayName ?? user.displayName ?? '',
         });
         router.replace(`/degerlendirme/${devamDegId}`);
       } catch {

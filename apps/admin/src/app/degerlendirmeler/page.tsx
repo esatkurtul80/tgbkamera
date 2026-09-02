@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -32,10 +32,10 @@ function KameramanDegerlendirmelerView() {
   useEffect(() => {
     if (!user) return;
     getDegerlendirmeler({ kameramanId: user.uid }).then((d) => {
-      // Açık raporlar önce, sonra oluşturma tarihine göre en yeni
+      // Devam eden raporlar önce, sonra oluşturma tarihine göre en yeni
       const sorted = [...d].sort((a, b) => {
-        if (a.durum === "acik" && b.durum !== "acik") return -1;
-        if (a.durum !== "acik" && b.durum === "acik") return 1;
+        if (devamEdiyorMu(a) && !devamEdiyorMu(b)) return -1;
+        if (!devamEdiyorMu(a) && devamEdiyorMu(b)) return 1;
         return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
       });
       setListe(sorted);
@@ -57,7 +57,7 @@ function KameramanDegerlendirmelerView() {
     setSiliyor(false);
   }
 
-  const acikSayisi = liste.filter((d) => d.durum === "acik").length;
+  const acikSayisi = liste.filter(devamEdiyorMu).length;
 
   const filtrelenmisListe = useMemo(() => {
     if (!tarihBaslangic && !tarihBitis) return liste;
@@ -106,9 +106,9 @@ function KameramanDegerlendirmelerView() {
       key: "durum",
       header: "Durum",
       width: "145px",
-      sortValue: (d) => (d.durum === "acik" ? 1 : 0),
+      sortValue: (d) => (devamEdiyorMu(d) ? 1 : 0),
       cell: (d) =>
-        d.durum === "acik" ? (
+        devamEdiyorMu(d) ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
             Devam Ediyor
@@ -200,7 +200,7 @@ function KameramanDegerlendirmelerView() {
       width: "160px",
       cell: (d) => (
         <div className="flex items-center justify-end gap-1">
-          {d.durum === "acik" ? (
+          {devamEdiyorMu(d) ? (
             <>
               <Link
                 href={`/degerlendirmeler/${d.id}`}
@@ -226,7 +226,11 @@ function KameramanDegerlendirmelerView() {
                 <Eye size={14} />
               </Link>
               <Link
-                href={`/degerlendirmeler/${d.id}/duzenle`}
+                // Puanlı matris raporunda "düzenle", raporun ilk açıldığı matris
+                // ekranını (devam modu) açar; diğer tipler ayrı düzenleme sayfasını kullanır.
+                href={kategoriUygunMu(d, "puanli")
+                  ? `/degerlendirmeler/yeni?devam=${d.id}`
+                  : `/degerlendirmeler/${d.id}/duzenle`}
                 className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex"
                 title="Düzenle"
               >
@@ -317,7 +321,27 @@ export default function DegerlendirmelerPage() {
   return <AdminDegerlendirmelerView />;
 }
 
-export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { baslik?: string } = {}) {
+/** Rapor kategorileri — ileride yeni kategoriler eklendikçe bu birlik genişletilir. */
+export type DegerlendirmeKategori = "puanli" | "yorumlu" | "puansiz";
+
+function kategoriUygunMu(
+  d: { puanli?: boolean; puanGirisTipi?: string },
+  kategori?: DegerlendirmeKategori
+): boolean {
+  if (!kategori) return true;
+  const yorumluMu = !!d.puanli && d.puanGirisTipi === "manuel";
+  if (kategori === "puanli") return !!d.puanli && !yorumluMu;
+  if (kategori === "yorumlu") return yorumluMu;
+  return !d.puanli; // puansiz
+}
+
+/** Puanlı matris raporları her zaman düzenlenebilir olduğundan hiçbir zaman
+ *  "devam ediyor" sayılmaz; ayrım yalnız puansız/yorumlu formlar için geçerlidir. */
+function devamEdiyorMu(d: Degerlendirme): boolean {
+  return d.durum === "acik" && !kategoriUygunMu(d, "puanli");
+}
+
+export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", kategori }: { baslik?: string; kategori?: DegerlendirmeKategori } = {}) {
   const { user, kullanici } = useAuth();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [formlar, setFormlar] = useState<Form[]>([]);
@@ -371,25 +395,28 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
     }
   }
 
-  function acikOnce(d: Degerlendirme[]): Degerlendirme[] {
-    return [...d].sort((a, b) => {
-      if (a.durum === "acik" && b.durum !== "acik") return -1;
-      if (a.durum !== "acik" && b.durum === "acik") return 1;
-      return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
-    });
-  }
+  // Kategori sayfalarında (puanlı/yorumlu/puansız) liste ilgili rapor tipine indirgenir
+  const hazirla = useCallback((d: Degerlendirme[]): Degerlendirme[] => {
+    return d
+      .filter((x) => kategoriUygunMu(x, kategori))
+      .sort((a, b) => {
+        if (devamEdiyorMu(a) && !devamEdiyorMu(b)) return -1;
+        if (!devamEdiyorMu(a) && devamEdiyorMu(b)) return 1;
+        return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
+      });
+  }, [kategori]);
 
   useEffect(() => {
     Promise.all([getDegerlendirmeler(), getFormlar(), getPersoneller(), getMagazalar()]).then(
       ([d, f, p, m]) => {
-        setListe(acikOnce(d));
+        setListe(hazirla(d));
         setFormlar(f);
         setPersoneller(p);
         setMagazalar(m);
         setLoading(false);
       }
     );
-  }, []);
+  }, [hazirla]);
 
   async function applyFilter() {
     setLoading(true);
@@ -398,7 +425,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
     if (filtrePersonel) filters.personelId = filtrePersonel;
     else if (filtreMagaza) filters.magazaId = filtreMagaza;
     else if (filtreForm) filters.formId = filtreForm;
-    setListe(acikOnce(await getDegerlendirmeler(filters)));
+    setListe(hazirla(await getDegerlendirmeler(filters)));
     setLoading(false);
   }
 
@@ -408,7 +435,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
     setFiltreMagaza("");
     setSecilenler(new Set());
     setLoading(true);
-    setListe(acikOnce(await getDegerlendirmeler()));
+    setListe(hazirla(await getDegerlendirmeler()));
     setLoading(false);
   }
 
@@ -433,7 +460,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
   }
 
   const hasFilter = filtrePersonel || filtreForm || filtreMagaza;
-  const acikSayisi = liste.filter((d) => d.durum === "acik").length;
+  const acikSayisi = liste.filter(devamEdiyorMu).length;
 
   const columns: DataColumn<Degerlendirme>[] = [
     {
@@ -458,13 +485,15 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
         />
       ),
     },
-    {
+    // Durum sütunu yalnızca açık/tamamlandı ayrımının anlamlı olduğu kategorilerde
+    // (yorumlu puanlı, puansız) gösterilir; Tümü ve Puanlı sayfalarında gizli.
+    ...(kategori !== "yorumlu" && kategori !== "puansiz" ? [] : [{
       key: "durum",
-      header: "Durum",
+      header: "Durum" as React.ReactNode,
       width: "140px",
-      sortValue: (d) => (d.durum === "acik" ? 1 : 0),
-      cell: (d) =>
-        d.durum === "acik" ? (
+      sortValue: (d: Degerlendirme) => (devamEdiyorMu(d) ? 1 : 0),
+      cell: (d: Degerlendirme) =>
+        devamEdiyorMu(d) ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
             Devam Ediyor
@@ -475,7 +504,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
             Tamamlandı
           </span>
         ),
-    },
+    }]),
     {
       key: "izlenmeTarihi",
       header: "İzlenme Tarihi",
@@ -584,7 +613,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
       width: "160px",
       cell: (d) => (
         <div className="flex items-center justify-end gap-1">
-          {d.durum === "acik" ? (
+          {devamEdiyorMu(d) ? (
             <>
               <Link
                 href={`/degerlendirmeler/${d.id}`}
@@ -610,7 +639,11 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
                 <Eye size={14} />
               </Link>
               <Link
-                href={`/degerlendirmeler/${d.id}/duzenle`}
+                // Puanlı matris raporunda "düzenle", raporun ilk açıldığı matris
+                // ekranını (devam modu) açar; diğer tipler ayrı düzenleme sayfasını kullanır.
+                href={kategoriUygunMu(d, "puanli")
+                  ? `/degerlendirmeler/yeni?devam=${d.id}`
+                  : `/degerlendirmeler/${d.id}/duzenle`}
                 className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex"
                 title="Düzenle"
               >
@@ -674,7 +707,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler" }: { ba
         className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
       >
         <option value="">Tüm Formlar</option>
-        {formlar.map((f) => (
+        {formlar.filter((f) => kategoriUygunMu(f, kategori)).map((f) => (
           <option key={f.id} value={f.id}>
             {f.ad}
           </option>

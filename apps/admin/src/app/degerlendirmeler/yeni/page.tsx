@@ -7,7 +7,8 @@ import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, 
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
-  getDegerlendirme, getAcikDegerlendirmeler, updateDegerlendirmeIzlenmeler, finalizeDegerlendirme,
+  getDegerlendirme, getAcikDegerlendirmeler, getAylikDegerlendirmeler,
+  updateDegerlendirmeIzlenmeler, setDegerlendirmeDurum,
 } from "@/lib/firestore";
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from "@/lib/skorlama";
 import PuansizDegerlendirmeFormu from "@/components/degerlendirme/PuansizDegerlendirmeFormu";
@@ -168,7 +169,6 @@ function YeniDegerlendirmeIcerik() {
   const [ctxMenu,      setCtxMenu]    = useState<{ x: number; y: number; izId: string; soruId: string } | null>(null);
   const [notDuzenle,   setNotDuzenle] = useState<{ izId: string; soruId: string; taslak: string } | null>(null);
   const [hucrePano,    setHucrePano]  = useState<{ cevap: CevapSecenegi | undefined; not?: string } | null>(null);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
   const [senkronBekliyor, setSenkronBekliyor] = useState(false);
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
@@ -196,11 +196,18 @@ function YeniDegerlendirmeIcerik() {
         setMagazalar(m);
 
         if (devamId) {
-          /* ── DEVAM MODU: mevcut açık raporu yükle ── */
+          /* ── DEVAM MODU: mevcut raporu yükle ── */
           const deg = await getDegerlendirme(devamId);
-          if (!deg || deg.durum === "kapali") {
+          // Puanlı matris raporları hep 'kapali' tutulur ve her zaman düzenlenebilir;
+          // 'kapali' engeli yalnızca puansız/yorumlu formlar için geçerlidir.
+          const devamMatrisMi = !!deg && deg.puanli && deg.puanGirisTipi !== "manuel";
+          if (!deg || (deg.durum === "kapali" && !devamMatrisMi)) {
             router.replace(kullanici?.rol === "kameraman" ? "/panel/kameraman" : "/degerlendirmeler");
             return;
+          }
+          // Eski akıştan 'acik' kalmış puanlı matris raporunu sessizce kapat
+          if (devamMatrisMi && deg.durum === "acik") {
+            setDegerlendirmeDurum(devamId, "kapali").catch(console.error);
           }
           setMagId(deg.magazaId);
           setPerId(deg.personelId);
@@ -257,13 +264,20 @@ function YeniDegerlendirmeIcerik() {
           }
           setBolumlar(detaylar);
 
-          // Bu personel/mağaza/ay için bu formda zaten açık bir rapor var mı? —
-          // varsa yeni bir tane daha açmak yerine onu devam ettir (yinelenen açık rapor engellenir).
-          const mevcutAcikRapor = (
-            await getAcikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
+          // Bu personel/mağaza/ay için bu formda zaten bir rapor var mı? — varsa yeni
+          // bir tane daha açmak yerine onu devam ettir (yinelenen rapor engellenir).
+          // Puanlı matris raporları 'kapali' tutulduğu için arama durumdan bağımsızdır.
+          const matrisMi = form.puanli && form.puanGirisTipi !== "manuel";
+          const mevcutAcikRapor = (matrisMi
+            ? await getAylikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
+            : await getAcikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
           ).find(d => d.formId === paramFormId);
 
           if (mevcutAcikRapor) {
+            // Eski akıştan 'acik' kalmış puanlı matris raporunu sessizce kapat
+            if (matrisMi && mevcutAcikRapor.durum === "acik") {
+              setDegerlendirmeDurum(mevcutAcikRapor.id, "kapali").catch(console.error);
+            }
             const localIzlenmeler: IzlenmeLocal[] = (mevcutAcikRapor.izlenmeler || []).map(iz => ({
               id: iz.id,
               tarih: iz.tarih.toDate(),
@@ -302,7 +316,9 @@ function YeniDegerlendirmeIcerik() {
                 izlenmeler: [], toplamPuan: null, maxPuan: null,
                 bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
                 cevaplar: {}, puansizCevaplar: {},
-                durum: "acik",
+                // Puanlı matris raporu baştan 'tamamlandı' sayılır (kaydet adımı yok,
+                // otomatik kayıtla yaşar); puansız/yorumlu formlar kaydedilince kapanır.
+                durum: matrisMi ? "kapali" : "acik",
                 izlenmeTarihi: Timestamp.now(),
               });
 
@@ -361,13 +377,19 @@ function YeniDegerlendirmeIcerik() {
     setBolumlar(detaylar);
     setIzlenmeler([]);
 
-    // Bu personel/mağaza/ay için bu formda zaten açık bir rapor var mı? —
-    // varsa yeni bir tane daha açmak yerine onu devam ettir.
-    const mevcutAcikRapor = (
-      await getAcikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
+    // Bu personel/mağaza/ay için bu formda zaten bir rapor var mı? — varsa yeni bir
+    // tane daha açmak yerine onu devam ettir. Puanlı matris için durumdan bağımsız arama.
+    const matrisMi = form.puanli && form.puanGirisTipi !== "manuel";
+    const mevcutAcikRapor = (matrisMi
+      ? await getAylikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
+      : await getAcikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
     ).find(d => d.formId === seciliFormId);
 
     if (mevcutAcikRapor) {
+      // Eski akıştan 'acik' kalmış puanlı matris raporunu sessizce kapat
+      if (matrisMi && mevcutAcikRapor.durum === "acik") {
+        setDegerlendirmeDurum(mevcutAcikRapor.id, "kapali").catch(console.error);
+      }
       const localIzlenmeler: IzlenmeLocal[] = (mevcutAcikRapor.izlenmeler || []).map(iz => ({
         id: iz.id,
         tarih: iz.tarih.toDate(),
@@ -404,7 +426,7 @@ function YeniDegerlendirmeIcerik() {
         izlenmeler: [], toplamPuan: null, maxPuan: null,
         bolumSnapshot: bolumSnap, soruSnapshot: soruSnapObj,
         cevaplar: {}, puansizCevaplar: {},
-        durum: "acik",
+        durum: matrisMi ? "kapali" : "acik",
         izlenmeTarihi: Timestamp.now(),
       });
 
@@ -493,12 +515,9 @@ function YeniDegerlendirmeIcerik() {
         tp = h.toplamPuan; mp = h.maxPuan;
       }
       setSenkronBekliyor(true);
-      // Bu raporu şu an kaydeden kameraman olarak işaretlenir — açık bir raporu
-      // başka bir kameraman devam ettirirse üstte onun adı görünsün diye.
-      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp, {
-        id: user!.uid,
-        ad: kullanici?.displayName ?? user!.displayName ?? "",
-      })
+      // Rapor sahibi (kameramanId/Ad) ilk oluşturan kişide sabit kalır; günü kimin
+      // işaretlediği zaten izlenme bazında kaydedenId/kaydedenAd ile tutuluyor.
+      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp)
         .then(() => setSenkronBekliyor(false))
         .catch(console.error); // Bağlantı kopukken hata verir; `online` deps'e eklendiği için bağlantı gelince tekrar dener.
     }, 800);
@@ -524,61 +543,6 @@ function YeniDegerlendirmeIcerik() {
   }, [izlenmeler, soruSnap, seciliForm]);
 
   const sistem = seciliForm?.skorlamaSistemi ?? "oran";
-
-  /* Kaydet */
-  async function handleKaydet() {
-    if (!seciliForm || !user) return;
-    setKaydediliyor(true);
-
-    // Bekleyen otomatik kayıt varsa iptal et
-    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-
-    const izlenmelerFS = izlenmeler
-      .filter(i => Object.values(i.cevaplar).some(v => v !== undefined))
-      .map(i => ({
-        id: i.id, tarih: Timestamp.fromDate(i.tarih),
-        cevaplar: Object.fromEntries(Object.entries(i.cevaplar).filter(([, v]) => v)) as Record<string, CevapSecenegi>,
-        ...(i.notlar && Object.keys(i.notlar).length > 0 ? { notlar: i.notlar } : {}),
-        kaydedenId: i.kaydedenId, kaydedenAd: i.kaydedenAd,
-      }));
-
-    let toplamPuan: number | null = null, maxPuan: number | null = null;
-    if (seciliForm.puanli) {
-      const h = hesaplaPuanFromIzlenmeler(
-        izlenmelerFS.map(i => ({ cevaplar: i.cevaplar })),
-        soruSnap, seciliForm.skorlamaSistemi ?? "oran"
-      );
-      toplamPuan = h.toplamPuan; maxPuan = h.maxPuan;
-    }
-
-    if (degId) {
-      // Kameraman akışı: açık raporu finalize et (durum → 'kapali')
-      await finalizeDegerlendirme(degId, izlenmelerFS, toplamPuan, maxPuan, {
-        id: user.uid,
-        ad: kullanici?.displayName ?? user.displayName ?? "",
-      });
-      router.push(`/degerlendirmeler/${degId}`);
-    } else {
-      // Admin / manuel akış: yeni doc oluştur
-      const bolumSnapshot: Record<string, BolumSnapshot> = {};
-      bolumDetaylar.forEach(b => { bolumSnapshot[b.id] = { ad: b.ad, soruIdleri: b.soruIdleri }; });
-      const personelObj = personeller.find(p => p.id === seciliPerId)!;
-      const magazaObj   = magazalar.find(m => m.id === seciliMagId);
-      const id = await createDegerlendirme({
-        formId: seciliForm.id, formAd: seciliForm.ad,
-        personelId: seciliPerId, personelAd: personelObj.ad,
-        magazaId: seciliMagId, magazaAd: magazaObj?.ad ?? "",
-        kameramanId: user.uid, kameramanAd: kullanici?.displayName ?? user.displayName ?? "",
-        ay: seciliAy, yil: seciliYil,
-        puanli: seciliForm.puanli, skorlamaSistemi: seciliForm.skorlamaSistemi,
-        izlenmeler: izlenmelerFS, toplamPuan, maxPuan,
-        bolumSnapshot, soruSnapshot: soruSnap,
-        durum: "kapali",
-        izlenmeTarihi: Timestamp.now(),
-      });
-      router.push(`/degerlendirmeler/${id}`);
-    }
-  }
 
   /* ─── Loading ─────────────────────────────────────────────────────────────── */
   if (yukleniyor) return (
@@ -973,16 +937,13 @@ function YeniDegerlendirmeIcerik() {
             <p className="text-sm text-slate-400">{izlenmeler.length} izlenme</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-400">
+            {senkronBekliyor ? "Kaydediliyor…" : "✓ Tüm değişiklikler otomatik kaydedildi"}
+          </span>
           <button onClick={() => router.back()}
             className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
             ← Geri
-          </button>
-          <button onClick={handleKaydet} disabled={kaydediliyor}
-            className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl
-              hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50
-              shadow-sm shadow-indigo-100">
-            {kaydediliyor ? "Kaydediliyor..." : "Değerlendirmeyi Kaydet"}
           </button>
         </div>
       </div>

@@ -20,10 +20,10 @@ import {
   getBolum,
   getSoru,
   getDegerlendirme,
-  getAcikDegerlendirmeler,
+  getAylikDegerlendirmeler,
   createDegerlendirme,
   updateDegerlendirmeIzlenmeler,
-  finalizeDegerlendirme,
+  setDegerlendirmeDurum,
 } from '@/lib/firestore';
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from '@/lib/skorlama';
 import type {
@@ -106,7 +106,6 @@ export default function MatrisScreen() {
   const [hucrePano, setHucrePano] = useState<{ cevap: CevapSecenegi | undefined; not?: string } | null>(null);
 
   const [senkron, setSenkron] = useState(false);
-  const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const olusturulduRef = useRef(false);
@@ -151,13 +150,17 @@ export default function MatrisScreen() {
     async function yukle() {
       try {
         if (params.devam) {
-          /* ── Devam modu: açık raporu yükle ── */
+          /* ── Devam modu: mevcut raporu yükle ── */
+          // Puanlı matris raporları hep 'kapali' tutulur ve her zaman düzenlenebilir;
+          // bu ekran yalnızca matris formları için açıldığından durum kontrolü yok.
           const deg = await getDegerlendirme(params.devam);
-          if (!deg || deg.durum === 'kapali') {
-            if (!iptal) setHata('Açık rapor bulunamadı ya da kapatılmış.');
+          if (!deg) {
+            if (!iptal) setHata('Rapor bulunamadı.');
             return;
           }
           if (iptal) return;
+          // Eski akıştan 'acik' kalmış raporu sessizce kapat
+          if (deg.durum === 'acik') setDegerlendirmeDurum(deg.id, 'kapali').catch(() => {});
           setDegId(deg.id);
           setBaslik({ personelAd: deg.personelAd, magazaAd: deg.magazaAd, formAd: deg.formAd });
           setAyYil({ ay: deg.ay, yil: deg.yil });
@@ -178,13 +181,16 @@ export default function MatrisScreen() {
           const form = await getForm(params.formId);
           if (!form) { if (!iptal) setHata('Form bulunamadı.'); return; }
 
-          // Bu ay için zaten açık rapor var mı? Varsa onu devam ettir.
-          const acikler = await getAcikDegerlendirmeler(
+          // Bu ay için zaten rapor var mı? Varsa onu devam ettir (durum fark etmez —
+          // puanlı matris raporları 'kapali' tutulur).
+          const raporlar = await getAylikDegerlendirmeler(
             params.personelId, params.magazaId, now.getMonth(), now.getFullYear()
           );
-          const mevcut = acikler.find((d) => d.formId === params.formId);
+          const mevcut = raporlar.find((d) => d.formId === params.formId);
           if (mevcut) {
             if (iptal) return;
+            // Eski akıştan 'acik' kalmış raporu sessizce kapat
+            if (mevcut.durum === 'acik') setDegerlendirmeDurum(mevcut.id, 'kapali').catch(() => {});
             setDegId(mevcut.id);
             setBaslik({ personelAd: mevcut.personelAd, magazaAd: mevcut.magazaAd, formAd: mevcut.formAd });
             setAyYil({ ay: mevcut.ay, yil: mevcut.yil });
@@ -229,7 +235,8 @@ export default function MatrisScreen() {
               kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? '',
               izlenmeTarihi: Timestamp.now(), raporlamaTarihi: Timestamp.now(),
               ay: now.getMonth(), yil: now.getFullYear(),
-              durum: 'acik', izlenmeler: [],
+              // Matris raporu baştan 'tamamlandı' sayılır — kaydet adımı yok, otomatik kayıtla yaşar.
+              durum: 'kapali', izlenmeler: [],
               puanli: form.puanli, puanGirisTipi: form.puanGirisTipi, skorlamaSistemi: form.skorlamaSistemi,
               toplamPuan: null, maxPuan: null,
               cevaplar: {}, puansizCevaplar: {},
@@ -308,10 +315,9 @@ export default function MatrisScreen() {
         tp = h.toplamPuan; mp = h.maxPuan;
       }
       setSenkron(true);
-      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp, {
-        id: user!.uid,
-        ad: kullanici?.displayName ?? user!.displayName ?? '',
-      })
+      // Rapor sahibi (kameramanId/Ad) ilk oluşturan kişide sabit kalır; günü kimin
+      // işaretlediği izlenme bazında kaydedenId/kaydedenAd ile tutuluyor.
+      updateDegerlendirmeIzlenmeler(degId, izlenmelerFS, tp, mp)
         .then(() => setSenkron(false))
         .catch(() => setSenkron(false));
     }, 800);
@@ -378,46 +384,6 @@ export default function MatrisScreen() {
       })
     );
   }, []);
-
-  async function handleKaydet() {
-    if (!degId || !user) return;
-    Alert.alert('Değerlendirmeyi Kaydet', 'Rapor kapatılacak ve tamamlanmış olarak işaretlenecek. Emin misiniz?', [
-      { text: 'İptal', style: 'cancel' },
-      {
-        text: 'Kaydet',
-        onPress: async () => {
-          setKaydediliyor(true);
-          if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-          try {
-            const izlenmelerFS = izlenmeler
-              .filter((i) => Object.values(i.cevaplar).some((v) => v !== undefined))
-              .map((i) => ({
-                id: i.id,
-                tarih: Timestamp.fromDate(i.tarih),
-                cevaplar: Object.fromEntries(Object.entries(i.cevaplar).filter(([, v]) => v)) as Record<string, CevapSecenegi>,
-                ...(i.notlar && Object.keys(i.notlar).length > 0 ? { notlar: i.notlar } : {}),
-                kaydedenId: i.kaydedenId,
-                kaydedenAd: i.kaydedenAd,
-              }));
-            let tp: number | null = null, mp: number | null = null;
-            if (puanli) {
-              const h = hesaplaPuanFromIzlenmeler(izlenmelerFS.map((i) => ({ cevaplar: i.cevaplar })), soruSnap, sistem);
-              tp = h.toplamPuan; mp = h.maxPuan;
-            }
-            await finalizeDegerlendirme(degId, izlenmelerFS, tp, mp, {
-              id: user.uid,
-              ad: kullanici?.displayName ?? user.displayName ?? '',
-            });
-            router.replace(`/degerlendirme/${degId}`);
-          } catch (e: any) {
-            Alert.alert('Hata', e?.message ?? 'Kaydedilemedi');
-          } finally {
-            setKaydediliyor(false);
-          }
-        },
-      },
-    ]);
-  }
 
   /* ── Render ── */
   if (yukleniyor)
@@ -634,14 +600,6 @@ export default function MatrisScreen() {
           )}
           <Text style={styles.izlenmeSayisi}>{izlenmeler.length} izlenme</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.kaydetBtn, kaydediliyor && { opacity: 0.6 }]}
-          onPress={handleKaydet}
-          disabled={kaydediliyor}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.kaydetBtnText}>{kaydediliyor ? 'Kaydediliyor…' : 'Raporu Kapat'}</Text>
-        </TouchableOpacity>
       </View>
 
       {/* ── Saat modalı ── */}
@@ -868,8 +826,6 @@ const styles = StyleSheet.create({
   senkronText: { fontSize: 12, color: '#f59e0b', fontWeight: '600' },
   senkronOk: { fontSize: 12, color: '#10b981', fontWeight: '600' },
   izlenmeSayisi: { fontSize: 11, color: '#94a3b8', marginTop: 1 },
-  kaydetBtn: { backgroundColor: '#4f46e5', borderRadius: 12, paddingHorizontal: 22, paddingVertical: 12 },
-  kaydetBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   modalArka: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   modalKutu: { width: '100%', maxWidth: 380, backgroundColor: '#fff', borderRadius: 18, padding: 20 },
