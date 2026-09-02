@@ -539,7 +539,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     },
     {
       key: "kameraman",
-      header: "Kameraman",
+      header: "Kamera Gözlem",
       searchValue: (d) => d.kameramanAd ?? "",
       sortValue: (d) => d.kameramanAd ?? "",
       cell: (d) =>
@@ -749,7 +749,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         columns={columns}
         rowKey={(d) => d.id}
         loading={loading}
-        searchPlaceholder="Personel, kameraman veya form ara..."
+        searchPlaceholder="Personel, kamera gözlem veya form ara..."
         emptyIcon={ClipboardList}
         emptyTitle="Değerlendirme bulunamadı"
         emptyDescription="Yeni raporlar Panelim sayfasında mağaza seçilip personel üzerinden başlatılır."

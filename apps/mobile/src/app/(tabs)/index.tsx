@@ -139,7 +139,7 @@ function KameramanPanel() {
     load();
   };
 
-  const ad = kullanici?.displayName?.split(' ')[0] ?? 'Kameraman';
+  const ad = kullanici?.displayName?.split(' ')[0] ?? 'Kamera Gözlem';
   const sonBes = degerlendirmeler.slice(0, 5);
 
   // Son 7 günün rapor sayıları (haftalık mini grafik)

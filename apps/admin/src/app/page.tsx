@@ -245,7 +245,7 @@ export default function DashboardPage() {
         <StatCard icon={Users} title="Personel" value={stats?.toplamPersonel ?? 0} sub={`${stats?.aktifPersonel} aktif`} color="bg-indigo-500" href="/personel" />
         <StatCard icon={Store} title="Mağazalar" value={stats?.toplamMagaza ?? 0} sub={`${stats?.toplamBolge} bölge`} color="bg-teal-500" href="/magazalar" />
         <StatCard icon={ClipboardList} title="Bu Ay Değerlendirme" value={stats?.buAyDegerlendirme ?? 0} sub={`${stats?.bugunDegerlendirme} bugün`} color="bg-blue-500" href="/degerlendirmeler" />
-        <StatCard icon={Camera} title="Kameramanlar" value={stats?.toplamKameraman ?? 0} sub={`${stats?.toplamDegerlendirme} toplam rapor`} color="bg-violet-500" href="/kullanicilar" />
+        <StatCard icon={Camera} title="Kamera Gözlem" value={stats?.toplamKameraman ?? 0} sub={`${stats?.toplamDegerlendirme} toplam rapor`} color="bg-violet-500" href="/kullanicilar" />
       </div>
 
       <div className="grid grid-cols-12 gap-5">

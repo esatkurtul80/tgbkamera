@@ -111,7 +111,7 @@ export default function LoginPage() {
             Mağaza denetimlerini ve personel performansını tek panelden yönetin.
           </h2>
           <p className="text-indigo-100/80 text-sm leading-relaxed">
-            Kameramanlarınızın sahadan ilettiği değerlendirmeleri anında görün, puanlayın ve raporlayın.
+            Kamera gözlem ekibinizin sahadan ilettiği değerlendirmeleri anında görün, puanlayın ve raporlayın.
           </p>
           <div className="mt-9 flex gap-2.5 flex-wrap">
             {["Mağaza Denetimi", "Personel Değerlendirme", "Raporlama"].map((tag) => (

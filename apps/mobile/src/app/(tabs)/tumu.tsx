@@ -96,7 +96,7 @@ type SecimSayfa = 'magaza' | 'form' | 'kameraman' | 'personel' | 'donem';
 const SECIM_BASLIK: Record<SecimSayfa, string> = {
   magaza: 'Mağaza',
   form: 'Form',
-  kameraman: 'Kameraman',
+  kameraman: 'Kamera Gözlem',
   personel: 'Personel',
   donem: 'Dönem',
 };
@@ -422,7 +422,7 @@ export default function TumDegerlendirmelerScreen() {
   if (filtre.puan) aktifCipler.push({ alan: 'puan', etiket: PUAN_SECENEK.find((s) => s.id === filtre.puan)?.ad ?? '' });
   if (filtre.magazaId) aktifCipler.push({ alan: 'magazaId', etiket: magazaSecenekleri.find((m) => m.id === filtre.magazaId)?.ad ?? 'Mağaza' });
   if (filtre.formId) aktifCipler.push({ alan: 'formId', etiket: formlar.find((f) => f.id === filtre.formId)?.ad ?? 'Form' });
-  if (filtre.kameramanId) aktifCipler.push({ alan: 'kameramanId', etiket: kameramanlar.find((k) => k.id === filtre.kameramanId)?.ad ?? 'Kameraman' });
+  if (filtre.kameramanId) aktifCipler.push({ alan: 'kameramanId', etiket: kameramanlar.find((k) => k.id === filtre.kameramanId)?.ad ?? 'Kamera Gözlem' });
   if (filtre.personelId) aktifCipler.push({ alan: 'personelId', etiket: personeller.find((p) => p.id === filtre.personelId)?.ad ?? 'Personel' });
   if (filtre.donem) aktifCipler.push({ alan: 'donem', etiket: donemler.find((d) => d.id === filtre.donem)?.ad ?? 'Dönem' });
 

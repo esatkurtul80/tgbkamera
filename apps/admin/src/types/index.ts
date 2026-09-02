@@ -25,7 +25,7 @@ export const ROL_ETIKETLERI: Record<KullaniciRol, string> = {
   ust_yonetici: "Üst Yönetici",
   bolge_muduru: "Bölge Müdürü",
   magaza_sorumlusu: "Mağaza",
-  kameraman: "Kameraman",
+  kameraman: "Kamera Gözlem",
 };
 
 export interface Kullanici {

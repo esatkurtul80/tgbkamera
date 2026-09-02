@@ -614,7 +614,7 @@ export default function KameramanPaneliPage() {
                     <Users size={32} className="text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-700">Bu Mağazada Personel Bulunmuyor</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Kameraman olarak bu mağazada raporlamak istediğiniz personelleri sağ üstteki "Havuzdan Personel Çek" butonu ile ortak havuzdan buraya ekleyebilirsiniz.
+                      Kamera gözlem olarak bu mağazada raporlamak istediğiniz personelleri sağ üstteki "Havuzdan Personel Çek" butonu ile ortak havuzdan buraya ekleyebilirsiniz.
                     </p>
                   </div>
                 );

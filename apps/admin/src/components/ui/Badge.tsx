@@ -46,7 +46,7 @@ const labels: Record<BadgeVariant, string> = {
   ust_yonetici: "Üst Yönetici",
   bolge_muduru: "Bölge Müdürü",
   magaza_sorumlusu: "Mağaza",
-  kameraman: "Kameraman",
+  kameraman: "Kamera Gözlem",
   evet_hayir_muaf: "Evet/Hayır/Muaf",
   sayi: "Sayı",
   tarih: "Tarih",
