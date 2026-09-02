@@ -63,6 +63,8 @@ export default function KameramanPaneliPage() {
 
   // Raporlama Modal State (unified: devam eden + yeni rapor)
   const [raporModalPersonel, setRaporModalPersonel] = useState<Personel | null>(null);
+  // Mağaza Raporlama Modal State — yalnız mağaza formları listelenir
+  const [magazaRaporModalAcik, setMagazaRaporModalAcik] = useState(false);
   const [acikRaporlar, setAcikRaporlar] = useState<Degerlendirme[]>([]);
   const [raporModalYukleniyor, setRaporModalYukleniyor] = useState(false);
 
@@ -574,6 +576,12 @@ export default function KameramanPaneliPage() {
 
             <div className="flex items-center gap-2 shrink-0">
               <button
+                onClick={() => setMagazaRaporModalAcik(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 active:scale-[0.98] transition-all shadow-sm shadow-teal-100"
+              >
+                <Store size={14} /> Mağaza Raporla
+              </button>
+              <button
                 onClick={handleHavuzTikla}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-sm shadow-indigo-100"
               >
@@ -787,12 +795,13 @@ export default function KameramanPaneliPage() {
                   </p>
                 )}
                 <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                  {formlar.length === 0 ? (
+                  {/* Mağaza formları personel raporlamasında listelenmez */}
+                  {formlar.filter((f) => !f.magazaFormu).length === 0 ? (
                     <div className="py-8 text-center text-slate-400 text-sm">
                       Aktif değerlendirme formu bulunmuyor.
                     </div>
                   ) : (
-                    formlar.map((f) => (
+                    formlar.filter((f) => !f.magazaFormu).map((f) => (
                       <button
                         key={f.id}
                         onClick={() => handleFormSec(f.id)}
@@ -810,6 +819,47 @@ export default function KameramanPaneliPage() {
               </div>
             </>
           )}
+        </div>
+      </Modal>
+
+      {/* Mağaza Raporlama Modalı — yalnız "Mağaza Formu" işaretli formlar listelenir */}
+      <Modal
+        open={magazaRaporModalAcik}
+        onClose={() => setMagazaRaporModalAcik(false)}
+        title={`${activeMagaza?.ad ?? ""} — Mağaza Raporlama`}
+      >
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold text-teal-600 uppercase tracking-wider">Mağaza Formu Seç</p>
+          <p className="text-xs text-slate-500">
+            <span className="font-semibold text-slate-700">{activeMagaza?.ad}</span> mağazası için başlatılacak
+            mağaza raporu formunu seçin. Rapor yeni sekmede açılır.
+          </p>
+          <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-60 overflow-y-auto">
+            {formlar.filter((f) => f.magazaFormu).length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-sm px-6">
+                Mağaza formu bulunmuyor. Formlar sayfasında bir formu düzenleyip
+                "Mağaza Formu" seçeneğini işaretleyin.
+              </div>
+            ) : (
+              formlar.filter((f) => f.magazaFormu).map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => {
+                    if (!activeMagaza) return;
+                    setMagazaRaporModalAcik(false);
+                    window.open(`/degerlendirmeler/yeni?magazaId=${activeMagaza.id}&formId=${f.id}&magazaRaporu=1`, "_blank");
+                  }}
+                  className="w-full text-left p-4 hover:bg-teal-50/40 transition-colors flex items-center justify-between group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 group-hover:text-teal-950">{f.ad}</p>
+                    {f.aciklama && <p className="text-xs text-slate-400 mt-1 truncate">{f.aciklama}</p>}
+                  </div>
+                  <ArrowRight size={14} className="text-slate-400 group-hover:text-teal-600 transition-transform group-hover:translate-x-1 shrink-0 ml-4" />
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </Modal>
 

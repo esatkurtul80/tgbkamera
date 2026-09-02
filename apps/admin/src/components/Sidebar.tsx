@@ -34,6 +34,7 @@ const RAPOR_KATEGORILERI: NavItem[] = [
   { name: "Puanlı Raporlar", href: "/tum-degerlendirmeler/puanli", icon: Table },
   { name: "Yorumlu Puanlı", href: "/tum-degerlendirmeler/yorumlu", icon: MessageSquare },
   { name: "Puansız Raporlar", href: "/tum-degerlendirmeler/puansiz", icon: File },
+  { name: "Mağaza Raporları", href: "/tum-degerlendirmeler/magaza", icon: Store },
 ];
 
 const adminSections: NavSection[] = [

@@ -179,7 +179,8 @@ function YeniDegerlendirmeIcerik() {
     async function boot() {
       try {
         const [f, m] = await Promise.all([getFormlar(), getMagazalar()]);
-        setFormlar(f);
+        // Mağaza formları personel raporlamasında listelenmez (web'deki "Mağaza Raporla" akışına özeldir)
+        setFormlar(f.filter((x) => !x.magazaFormu));
         setMagazalar(m);
 
         if (params.devam) {

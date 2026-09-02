@@ -350,6 +350,7 @@ export async function createForm(data: {
   puanli: boolean;
   puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
+  magazaFormu?: boolean;
   bolumIdleri: string[];
 }): Promise<string> {
   await bolumIdleriniDogrula(data.bolumIdleri, data.puanli, data.puanGirisTipi);
@@ -370,6 +371,7 @@ export async function updateForm(
     puanli: boolean;
     puanGirisTipi?: "otomatik" | "manuel";
     skorlamaSistemi?: SkorlamaSistemi;
+    magazaFormu?: boolean;
     bolumIdleri: string[];
   }
 ): Promise<void> {
@@ -576,7 +578,8 @@ export async function createDegerlendirme(
   data: Omit<Degerlendirme, "id" | "olusturmaTarihi">,
   id?: string
 ): Promise<string> {
-  const customId = id ?? generateCustomId(data.personelAd);
+  // Mağaza raporlarında personelAd boştur — kimliği mağaza adından üret.
+  const customId = id ?? generateCustomId(data.personelAd || data.magazaAd);
   await setDoc(doc(db, "degerlendirmeler", customId), {
     ...cleanData(data),
     olusturmaTarihi: serverTimestamp(),

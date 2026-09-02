@@ -15,6 +15,7 @@ export default function FormDuzenlePage() {
   const [ad, setAd] = useState("");
   const [aciklama, setAciklama] = useState("");
   const [puanli, setPuanli] = useState(true);
+  const [magazaFormu, setMagazaFormu] = useState(false);
   const [bolumler, setBolumler] = useState<Bolum[]>([]);
   const [sorularById, setSorularById] = useState<Record<string, Soru>>({});
   const [seciliIds, setSeciliIds] = useState<string[]>([]);
@@ -24,7 +25,7 @@ export default function FormDuzenlePage() {
 
   useEffect(() => {
     Promise.all([getForm(id), getBolumler(), getSorular()]).then(([form, tumBolumler, sorular]) => {
-      if (form) { setAd(form.ad); setAciklama(form.aciklama); setPuanli(form.puanli); setSeciliIds(form.bolumIdleri); }
+      if (form) { setAd(form.ad); setAciklama(form.aciklama); setPuanli(form.puanli); setMagazaFormu(form.magazaFormu ?? false); setSeciliIds(form.bolumIdleri); }
       setBolumler(tumBolumler);
       const map: Record<string, Soru> = {};
       sorular.forEach((s) => { map[s.id] = s; });
@@ -44,7 +45,7 @@ export default function FormDuzenlePage() {
     if (!ad.trim()) { setError("Form adı boş bırakılamaz."); return; }
     setSaving(true);
     try {
-      await updateForm(id, { ad: ad.trim(), aciklama: aciklama.trim(), puanli, bolumIdleri: seciliIds });
+      await updateForm(id, { ad: ad.trim(), aciklama: aciklama.trim(), puanli, magazaFormu, bolumIdleri: seciliIds });
       router.push("/formlar");
     } catch (err) {
       setError((err as Error).message);
@@ -110,6 +111,24 @@ export default function FormDuzenlePage() {
                 {!puanli && <Check size={13} />} Puansız
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={magazaFormu}
+                onChange={(e) => setMagazaFormu(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-700">Mağaza Formu</span>
+                <span className="block text-xs text-slate-400 mt-0.5">
+                  İşaretlenirse bu form yalnız mağaza raporlamasında ("Mağaza Raporla" akışı) listelenir;
+                  personel raporlama form listelerinde görünmez.
+                </span>
+              </span>
+            </label>
           </div>
         </div>
 

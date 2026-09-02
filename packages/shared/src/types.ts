@@ -90,6 +90,8 @@ export interface Form<T = TimestampLike> {
   aciklama: string;
   puanli: boolean;
   skorlamaSistemi?: SkorlamaSistemi;
+  /** true ise form mağaza raporlaması içindir; personel raporlama listelerinde görünmez. */
+  magazaFormu?: boolean;
   bolumIdleri: string[];
   olusturmaTarihi: T;
   guncellemeTarihi: T;
@@ -140,6 +142,8 @@ export interface Degerlendirme<T = TimestampLike> {
   kameramanAd: string;
   izlenmeTarihi: T;
   raporlamaTarihi: T;
+  /** true ise rapor personele değil mağazanın kendisine aittir (personelId/Ad boş). */
+  magazaRaporu?: boolean;
   puanli: boolean;
   skorlamaSistemi?: SkorlamaSistemi;
   toplamPuan: number | null;

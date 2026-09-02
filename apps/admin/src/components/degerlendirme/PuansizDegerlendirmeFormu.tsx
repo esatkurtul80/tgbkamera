@@ -29,7 +29,10 @@ const TIP_LABEL: Record<SoruTipi, string> = {
 interface PuansizDegerlendirmeFormuProps {
   form: Form;
   bolumDetaylar: BolumDetay[];
-  personel: Personel;
+  /** Mağaza raporunda personel yoktur — rapor mağazanın kendisine yazılır. */
+  personel?: Personel;
+  /** true ise rapor mağaza raporudur (personelId/Ad boş kaydedilir). */
+  magazaRaporu?: boolean;
   magaza: Magaza;
   kameramanId: string;
   kameramanAd: string;
@@ -52,6 +55,7 @@ export default function PuansizDegerlendirmeFormu({
   form,
   bolumDetaylar,
   personel,
+  magazaRaporu = false,
   magaza,
   kameramanId,
   kameramanAd,
@@ -130,7 +134,7 @@ export default function PuansizDegerlendirmeFormu({
     }));
 
     uploadDegerlendirmeFoto(
-      { degerlendirmeId: mevcutId, soruId, magazaAd: magaza.ad, personelAd: personel.ad, tarih: izlenmeTarihi },
+      { degerlendirmeId: mevcutId, soruId, magazaAd: magaza.ad, personelAd: personel?.ad ?? magaza.ad, tarih: izlenmeTarihi },
       item.file,
       idx
     )
@@ -216,7 +220,7 @@ export default function PuansizDegerlendirmeFormu({
         bolumSnapshot[b.id] = { ad: b.ad, soruIdleri: b.soruIdleri };
       });
 
-      const docId = mevcutId ?? generateCustomId(personel.ad);
+      const docId = mevcutId ?? generateCustomId(personel?.ad ?? magaza.ad);
 
       // Bekleyen fotoğrafları yükle (mevcut fotoğraflar zaten puansizCevaplar içinde tutuluyor)
       const entries = await Promise.all(
@@ -225,7 +229,7 @@ export default function PuansizDegerlendirmeFormu({
           const yuklenenler = await Promise.all(
             items.map((it, i) =>
               uploadDegerlendirmeFoto(
-                { degerlendirmeId: docId, soruId, magazaAd: magaza.ad, personelAd: personel.ad, tarih: izlenmeTarihi },
+                { degerlendirmeId: docId, soruId, magazaAd: magaza.ad, personelAd: personel?.ad ?? magaza.ad, tarih: izlenmeTarihi },
                 it.file,
                 i
               )
@@ -263,10 +267,11 @@ export default function PuansizDegerlendirmeFormu({
           {
             formId: form.id,
             formAd: form.ad,
-            personelId: personel.id,
-            personelAd: personel.ad,
+            personelId: personel?.id ?? "",
+            personelAd: personel?.ad ?? "",
             magazaId: magaza.id,
             magazaAd: magaza.ad,
+            ...(magazaRaporu ? { magazaRaporu: true } : {}),
             kameramanId,
             kameramanAd,
             ay: tarih.getMonth(),
@@ -347,9 +352,15 @@ export default function PuansizDegerlendirmeFormu({
             <div className="min-w-0">
               <h1 className="text-lg font-bold text-slate-900 leading-tight truncate">{form.ad}</h1>
               <div className="flex items-center gap-3.5 mt-1">
-                <span className="flex items-center gap-1 text-xs text-slate-500">
-                  <User size={12} /> {personel.ad}
-                </span>
+                {personel ? (
+                  <span className="flex items-center gap-1 text-xs text-slate-500">
+                    <User size={12} /> {personel.ad}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                    Mağaza Raporu
+                  </span>
+                )}
                 <span className="flex items-center gap-1 text-xs text-slate-500">
                   <Store size={12} /> {magaza.ad}
                 </span>

@@ -310,12 +310,13 @@ export default function DegerlendirmelerPage() {
 }
 
 /** Rapor kategorileri — ileride yeni kategoriler eklendikçe bu birlik genişletilir. */
-export type DegerlendirmeKategori = "puanli" | "yorumlu" | "puansiz";
+export type DegerlendirmeKategori = "puanli" | "yorumlu" | "puansiz" | "magaza";
 
 function kategoriUygunMu(
-  d: { puanli?: boolean; puanGirisTipi?: string },
+  d: { puanli?: boolean; puanGirisTipi?: string; magazaRaporu?: boolean },
   kategori?: DegerlendirmeKategori
 ): boolean {
+  if (kategori === "magaza") return !!d.magazaRaporu;
   if (!kategori) return true;
   const yorumluMu = !!d.puanli && d.puanGirisTipi === "manuel";
   if (kategori === "puanli") return !!d.puanli && !yorumluMu;
@@ -388,10 +389,12 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     }
   }
 
-  // Kategori sayfalarında (puanlı/yorumlu/puansız) liste ilgili rapor tipine indirgenir
+  // Kategori sayfalarında (puanlı/yorumlu/puansız/mağaza) liste ilgili rapor tipine indirgenir.
+  // Mağaza raporları ayrı bölümdür: yalnız "magaza" sayfasında listelenir,
+  // diğer tüm sayfalardan (Tümü dahil) hariç tutulur.
   const hazirla = useCallback((d: Degerlendirme[]): Degerlendirme[] => {
     return d
-      .filter((x) => kategoriUygunMu(x, kategori))
+      .filter((x) => (kategori === "magaza" ? !!x.magazaRaporu : !x.magazaRaporu && kategoriUygunMu(x, kategori)))
       .sort((a, b) => {
         if (devamEdiyorMu(a) && !devamEdiyorMu(b)) return -1;
         if (!devamEdiyorMu(a) && devamEdiyorMu(b)) return 1;
@@ -473,8 +476,8 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       ),
     },
     // Durum sütunu yalnızca açık/tamamlandı ayrımının anlamlı olduğu kategorilerde
-    // (yorumlu puanlı, puansız) gösterilir; Tümü ve Puanlı sayfalarında gizli.
-    ...(kategori !== "yorumlu" && kategori !== "puansiz" ? [] : [{
+    // (yorumlu puanlı, puansız, mağaza) gösterilir; Tümü ve Puanlı sayfalarında gizli.
+    ...(kategori !== "yorumlu" && kategori !== "puansiz" && kategori !== "magaza" ? [] : [{
       key: "durum",
       header: "Durum" as React.ReactNode,
       width: "140px",
@@ -506,13 +509,14 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         </span>
       ),
     },
-    {
+    // Mağaza raporlarında personel yoktur — Personel sütunu magaza sayfasında gizli.
+    ...(kategori === "magaza" ? [] : [{
       key: "personel",
-      header: "Personel",
-      searchValue: (d) => d.personelAd,
-      sortValue: (d) => d.personelAd,
-      filterValue: (d) => d.personelAd,
-      cell: (d) => (
+      header: "Personel" as React.ReactNode,
+      searchValue: (d: Degerlendirme) => d.personelAd,
+      sortValue: (d: Degerlendirme) => d.personelAd,
+      filterValue: (d: Degerlendirme) => d.personelAd,
+      cell: (d: Degerlendirme) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
             <span className="text-[10px] font-bold text-indigo-600">
@@ -522,7 +526,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
           <span className="text-sm font-medium text-slate-800">{d.personelAd}</span>
         </div>
       ),
-    },
+    }]),
     {
       key: "magaza",
       header: "Mağaza",

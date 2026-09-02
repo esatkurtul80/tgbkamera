@@ -64,7 +64,8 @@ export default function MagazaDetayScreen() {
     try {
       const [p, f] = await Promise.all([getPersonellerByMagaza(magazaId), getFormlar()]);
       setPersoneller(p);
-      setFormlar(f);
+      // Mağaza formları personel raporlamasında listelenmez (web'deki "Mağaza Raporla" akışına özeldir)
+      setFormlar(f.filter((x) => !x.magazaFormu));
     } finally {
       setLoading(false);
     }

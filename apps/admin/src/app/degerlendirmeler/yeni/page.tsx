@@ -145,6 +145,8 @@ function YeniDegerlendirmeIcerik() {
   const paramPersonelId = searchParams.get("personelId") || searchParams.get("personelld") || searchParams.get("personelıd") || searchParams.get("personelid") || "";
   const paramFormId = searchParams.get("formId") || searchParams.get("formld") || searchParams.get("formıd") || searchParams.get("formid") || "";
   const devamId = searchParams.get("devam") || "";
+  // Mağaza raporu modu: personel seçimi yoktur, rapor mağazanın kendisine aittir.
+  const paramMagazaRaporu = searchParams.get("magazaRaporu") === "1";
 
   /* Step 1 */
   const [adim, setAdim]           = useState<"secim" | "tablo">("secim");
@@ -173,6 +175,8 @@ function YeniDegerlendirmeIcerik() {
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
   const [degId, setDegId] = useState<string | null>(null);
+  // Param'dan veya devam edilen kayıttan gelen mağaza raporu bilgisi
+  const [magazaRaporuMu, setMagazaRaporuMu] = useState(false);
   // Devam edilen açık puansız raporun mevcut cevapları (varsa)
   const [devamPuansizCevaplar, setDevamPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri> | undefined>(undefined);
   const [devamIzlenmeTarihi, setDevamIzlenmeTarihi] = useState<string | undefined>(undefined);
@@ -214,6 +218,7 @@ function YeniDegerlendirmeIcerik() {
           setFormId(deg.formId);
           setAy(deg.ay);
           setYil(deg.yil);
+          setMagazaRaporuMu(!!deg.magazaRaporu);
 
           const form = f.find(x => x.id === deg.formId) || await getForm(deg.formId);
           if (!form) return;
@@ -244,11 +249,13 @@ function YeniDegerlendirmeIcerik() {
           setDegId(devamId);
           setAdim("tablo");
 
-        } else if (paramMagazaId && paramPersonelId && paramFormId) {
-          /* ── YENİ RAPOR (panel'den params ile gelindiğinde) ── */
+        } else if (paramMagazaId && paramFormId && (paramPersonelId || paramMagazaRaporu)) {
+          /* ── YENİ RAPOR (panel'den params ile gelindiğinde) ──
+             Mağaza raporu modunda personelId boştur, rapor mağazaya yazılır. */
           setMagId(paramMagazaId);
           setPerId(paramPersonelId);
           setFormId(paramFormId);
+          setMagazaRaporuMu(paramMagazaRaporu);
           setBaslaniyor(true);
 
           const form = f.find(x => x.id === paramFormId) || await getForm(paramFormId);
@@ -310,6 +317,7 @@ function YeniDegerlendirmeIcerik() {
                 formId: form.id, formAd: form.ad,
                 personelId: paramPersonelId, personelAd: personelObj?.ad ?? "",
                 magazaId: paramMagazaId, magazaAd: magazaObj?.ad ?? "",
+                ...(paramMagazaRaporu ? { magazaRaporu: true } : {}),
                 kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
                 ay: now.getMonth(), yil: now.getFullYear(),
                 puanli: form.puanli, puanGirisTipi: form.puanGirisTipi, skorlamaSistemi: form.skorlamaSistemi,
@@ -345,7 +353,7 @@ function YeniDegerlendirmeIcerik() {
     }
 
     yukle();
-  }, [devamId, paramMagazaId, paramPersonelId, paramFormId, user, kullanici, router]);
+  }, [devamId, paramMagazaId, paramPersonelId, paramFormId, paramMagazaRaporu, user, kullanici, router]);
 
   const isKameraman = kullanici?.rol === "kameraman";
   const authMagazaIdleri = kullanici?.magazaIdleri || [];
@@ -595,7 +603,8 @@ function YeniDegerlendirmeIcerik() {
               className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-800
                 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-all disabled:opacity-50">
               <option value="">Seçin...</option>
-              {formlar.map(f => <option key={f.id} value={f.id}>{f.ad}</option>)}
+              {/* Mağaza formları personel raporlamasında listelenmez */}
+              {formlar.filter(f => !f.magazaFormu).map(f => <option key={f.id} value={f.id}>{f.ad}</option>)}
             </select>
           </div>
 
@@ -648,12 +657,13 @@ function YeniDegerlendirmeIcerik() {
   );
 
   /* ════════ PUANSIZ / YORUMLU PUANLI — TEK SEFERLİK FORM ════════════════════════ */
-  if (seciliForm && (seciliForm.puanli === false || seciliForm.puanGirisTipi === "manuel") && personel && magaza) {
+  if (seciliForm && (seciliForm.puanli === false || seciliForm.puanGirisTipi === "manuel") && (personel || magazaRaporuMu) && magaza) {
     return (
       <PuansizDegerlendirmeFormu
         form={seciliForm}
         bolumDetaylar={bolumDetaylar}
         personel={personel}
+        magazaRaporu={magazaRaporuMu}
         magaza={magaza}
         kameramanId={user!.uid}
         kameramanAd={kullanici?.displayName ?? user!.displayName ?? ""}
@@ -681,7 +691,8 @@ function YeniDegerlendirmeIcerik() {
       <div className="shrink-0 bg-slate-900 text-white px-8 py-4 flex items-center justify-between z-10 shadow-sm">
         <div className="flex items-center gap-6 min-w-0">
           <h1 className="text-lg font-bold uppercase tracking-tight truncate">
-            {personel?.ad} <span className="text-slate-400 font-normal text-sm ml-3">{magaza?.ad} / {bolumDetaylar.map(b => b.ad).join(", ")}</span>
+            {magazaRaporuMu ? `${magaza?.ad} (Mağaza Raporu)` : personel?.ad}{" "}
+            <span className="text-slate-400 font-normal text-sm ml-3">{magaza?.ad} / {bolumDetaylar.map(b => b.ad).join(", ")}</span>
           </h1>
           <div className="h-8 w-px bg-white/20 shrink-0"></div>
           {puan && puan.maxPuan > 0 && (

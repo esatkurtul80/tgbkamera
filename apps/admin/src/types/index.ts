@@ -94,6 +94,9 @@ export interface Form {
   /** puanli=true iken: "otomatik" (matris/izlenme bazlı, varsayılan) | "manuel" (yorumlu puanlı — puansız gibi cevaplanır, puan elle girilir) */
   puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
+  /** true ise form mağaza raporlaması içindir: yalnız "Mağaza Raporla" akışında
+   *  listelenir, personel raporlama form listelerinde görünmez. */
+  magazaFormu?: boolean;
   bolumIdleri: string[];
   olusturmaTarihi: Timestamp;
   guncellemeTarihi: Timestamp;
@@ -163,6 +166,10 @@ export interface Degerlendirme {
 
   /** 'acik': devam eden, 'kapali': tamamlanmış. Eski kayıtlarda undefined = kapali. */
   durum?: DegerlendirmeDurum;
+
+  /** true ise rapor personele değil mağazanın kendisine aittir (personelId/Ad boş);
+   *  yalnız "Mağaza Raporları" kategorisinde listelenir. */
+  magazaRaporu?: boolean;
 
   puanli: boolean;
   /** puanli=true iken: "otomatik" (matris/izlenme bazlı, varsayılan) | "manuel" (yorumlu puanlı — puansız gibi cevaplanır, puan elle girilir). Formdan snapshot alınır. */
