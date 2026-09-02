@@ -18,6 +18,8 @@ export interface DataColumn<T> {
   searchValue?: (row: T) => string;
   /** Verilirse başlıkta Excel benzeri, benzersiz değer listesinden çoklu seçim filtresi açılır. */
   filterValue?: (row: T) => string;
+  /** Verilirse başlıkta iki tarihli (başlangıç–bitiş) aralık filtresi açılır; filterValue'dan önceliklidir. */
+  filterDate?: (row: T) => Date | null;
   align?: "left" | "center" | "right";
   width?: string;
 }
@@ -75,22 +77,43 @@ export default function DataTable<T>({
   // Excel benzeri sütun filtreleri: sütun anahtarı → seçili değerler.
   // Boş küme = o sütunda filtre yok (tümü görünür).
   const [filters, setFilters] = useState<Record<string, Set<string>>>({});
+  // Tarih sütunları: sütun anahtarı → {from, to} (yyyy-MM-dd, boş = sınırsız).
+  const [dateFilters, setDateFilters] = useState<Record<string, { from: string; to: string }>>({});
   const [acikFiltre, setAcikFiltre] = useState<{ key: string; top: number; left: number } | null>(null);
   const [filtreArama, setFiltreArama] = useState("");
 
   const searchable = showSearch && columns.some((c) => c.searchValue);
-  const hasActiveFilters = Object.values(filters).some((s) => s.size > 0);
+  const hasActiveFilters =
+    Object.values(filters).some((s) => s.size > 0) ||
+    Object.values(dateFilters).some((r) => r.from || r.to);
+
+  const tarihAraligindaMi = (t: Date | null, aralik: { from: string; to: string }): boolean => {
+    if (!t) return false;
+    if (aralik.from && t < new Date(aralik.from)) return false;
+    if (aralik.to) {
+      const bitis = new Date(aralik.to);
+      bitis.setHours(23, 59, 59, 999);
+      if (t > bitis) return false;
+    }
+    return true;
+  };
 
   const columnFilteredData = useMemo(() => {
     const aktif = Object.entries(filters).filter(([, s]) => s.size > 0);
-    if (aktif.length === 0) return data;
-    return data.filter((row) =>
-      aktif.every(([key, secili]) => {
-        const col = columns.find((c) => c.key === key);
-        return !col?.filterValue || secili.has(col.filterValue(row));
-      })
+    const aktifTarih = Object.entries(dateFilters).filter(([, r]) => r.from || r.to);
+    if (aktif.length === 0 && aktifTarih.length === 0) return data;
+    return data.filter(
+      (row) =>
+        aktif.every(([key, secili]) => {
+          const col = columns.find((c) => c.key === key);
+          return !col?.filterValue || secili.has(col.filterValue(row));
+        }) &&
+        aktifTarih.every(([key, aralik]) => {
+          const col = columns.find((c) => c.key === key);
+          return !col?.filterDate || tarihAraligindaMi(col.filterDate(row), aralik);
+        })
     );
-  }, [data, filters, columns]);
+  }, [data, filters, dateFilters, columns]);
 
   const searchedData = useMemo(() => {
     if (!search.trim()) return columnFilteredData;
@@ -123,13 +146,19 @@ export default function DataTable<T>({
   // veri üzerinden benzersiz değerler + kayıt sayıları (Excel davranışı).
   const acikCol = acikFiltre ? columns.find((c) => c.key === acikFiltre.key) : null;
   const filtreSecenekleri = useMemo(() => {
-    if (!acikCol?.filterValue) return [];
+    if (!acikCol?.filterValue || acikCol.filterDate) return [];
     const digerleri = Object.entries(filters).filter(([k, s]) => k !== acikCol.key && s.size > 0);
-    const satirlar = data.filter((row) =>
-      digerleri.every(([k, secili]) => {
-        const c = columns.find((cc) => cc.key === k);
-        return !c?.filterValue || secili.has(c.filterValue(row));
-      })
+    const digerTarihler = Object.entries(dateFilters).filter(([k, r]) => k !== acikCol.key && (r.from || r.to));
+    const satirlar = data.filter(
+      (row) =>
+        digerleri.every(([k, secili]) => {
+          const c = columns.find((cc) => cc.key === k);
+          return !c?.filterValue || secili.has(c.filterValue(row));
+        }) &&
+        digerTarihler.every(([k, aralik]) => {
+          const c = columns.find((cc) => cc.key === k);
+          return !c?.filterDate || tarihAraligindaMi(c.filterDate(row), aralik);
+        })
     );
     const sayilar = new Map<string, number>();
     satirlar.forEach((row) => {
@@ -139,7 +168,8 @@ export default function DataTable<T>({
     return [...sayilar.entries()]
       .sort((a, b) => optionSirala(a[0], b[0]))
       .map(([value, count]) => ({ value, count }));
-  }, [acikCol, data, filters, columns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acikCol, data, filters, dateFilters, columns]);
 
   const gorunenSecenekler = useMemo(() => {
     if (!filtreArama.trim()) return filtreSecenekleri;
@@ -187,11 +217,21 @@ export default function DataTable<T>({
 
   function sutunFiltreTemizle(key: string) {
     setFilters((prev) => ({ ...prev, [key]: new Set() }));
+    setDateFilters((prev) => ({ ...prev, [key]: { from: "", to: "" } }));
+    setPage(1);
+  }
+
+  function tarihFiltreDegistir(key: string, alan: "from" | "to", deger: string) {
+    setDateFilters((prev) => {
+      const mevcut = prev[key] ?? { from: "", to: "" };
+      return { ...prev, [key]: { ...mevcut, [alan]: deger } };
+    });
     setPage(1);
   }
 
   function tumFiltreleriTemizle() {
     setFilters({});
+    setDateFilters({});
     setAcikFiltre(null);
     setPage(1);
   }
@@ -226,7 +266,9 @@ export default function DataTable<T>({
   }
 
   const py = compact ? "py-2.5" : "py-3.5";
-  const aktifFiltreSayisi = Object.values(filters).filter((s) => s.size > 0).length;
+  const aktifFiltreSayisi =
+    Object.values(filters).filter((s) => s.size > 0).length +
+    Object.values(dateFilters).filter((r) => r.from || r.to).length;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -299,8 +341,10 @@ export default function DataTable<T>({
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
                 {columns.map((col) => {
-                  const filtreAktif = (filters[col.key]?.size ?? 0) > 0;
-                  const filtreButonu = col.filterValue ? (
+                  const filtreAktif =
+                    (filters[col.key]?.size ?? 0) > 0 ||
+                    !!(dateFilters[col.key]?.from || dateFilters[col.key]?.to);
+                  const filtreButonu = col.filterValue || col.filterDate ? (
                     <button
                       onClick={(e) => filtreAcKapa(col.key, e)}
                       title="Filtrele"
@@ -373,59 +417,92 @@ export default function DataTable<T>({
             className="fixed z-50 w-[264px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
             style={{ top: acikFiltre.top, left: acikFiltre.left }}
           >
-            <div className="p-2 border-b border-slate-100">
-              <div className="relative">
-                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  autoFocus
-                  value={filtreArama}
-                  onChange={(e) => setFiltreArama(e.target.value)}
-                  placeholder="Değer ara..."
-                  className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={(filters[acikFiltre.key]?.size ?? 0) === 0}
-                  onChange={() => sutunFiltreTemizle(acikFiltre.key)}
-                  className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                Tümünü Seç
-              </label>
-              {(filters[acikFiltre.key]?.size ?? 0) > 0 && (
-                <button
-                  onClick={() => sutunFiltreTemizle(acikFiltre.key)}
-                  className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
-                >
-                  Temizle
-                </button>
-              )}
-            </div>
-            <div className="max-h-56 overflow-y-auto py-1">
-              {gorunenSecenekler.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-slate-400">Eşleşen değer yok</p>
-              ) : (
-                gorunenSecenekler.map((o) => (
-                  <label
-                    key={o.value}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+            {acikCol.filterDate ? (
+              <div className="p-3 space-y-2.5">
+                <label className="block">
+                  <span className="text-[11px] font-medium text-slate-500">Başlangıç</span>
+                  <input
+                    type="date"
+                    value={dateFilters[acikFiltre.key]?.from ?? ""}
+                    onChange={(e) => tarihFiltreDegistir(acikFiltre.key, "from", e.target.value)}
+                    className="mt-1 w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-medium text-slate-500">Bitiş</span>
+                  <input
+                    type="date"
+                    value={dateFilters[acikFiltre.key]?.to ?? ""}
+                    onChange={(e) => tarihFiltreDegistir(acikFiltre.key, "to", e.target.value)}
+                    className="mt-1 w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                  />
+                </label>
+                {(dateFilters[acikFiltre.key]?.from || dateFilters[acikFiltre.key]?.to) && (
+                  <button
+                    onClick={() => sutunFiltreTemizle(acikFiltre.key)}
+                    className="w-full px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                   >
+                    Temizle
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="p-2 border-b border-slate-100">
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      value={filtreArama}
+                      onChange={(e) => setFiltreArama(e.target.value)}
+                      placeholder="Değer ara..."
+                      className="w-full pl-7 pr-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
+                  <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={secimIsaretliMi(acikFiltre.key, o.value)}
-                      onChange={() => degerToggle(acikFiltre.key, o.value)}
-                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                      checked={(filters[acikFiltre.key]?.size ?? 0) === 0}
+                      onChange={() => sutunFiltreTemizle(acikFiltre.key)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
-                    <span className="flex-1 truncate">{o.value}</span>
-                    <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{o.count}</span>
+                    Tümünü Seç
                   </label>
-                ))
-              )}
-            </div>
+                  {(filters[acikFiltre.key]?.size ?? 0) > 0 && (
+                    <button
+                      onClick={() => sutunFiltreTemizle(acikFiltre.key)}
+                      className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Temizle
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-56 overflow-y-auto py-1">
+                  {gorunenSecenekler.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-slate-400">Eşleşen değer yok</p>
+                  ) : (
+                    gorunenSecenekler.map((o) => (
+                      <label
+                        key={o.value}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={secimIsaretliMi(acikFiltre.key, o.value)}
+                          onChange={() => degerToggle(acikFiltre.key, o.value)}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                        />
+                        <span className="flex-1 truncate">{o.value}</span>
+                        <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{o.count}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

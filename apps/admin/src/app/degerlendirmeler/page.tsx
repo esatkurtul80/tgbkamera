@@ -466,7 +466,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       width: "130px",
       sortValue: (d) => d.izlenmeTarihi?.seconds ?? 0,
       searchValue: () => "",
-      filterValue: (d) => d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—",
+      filterDate: (d) => d.izlenmeTarihi?.toDate?.() ?? null,
       cell: (d) => (
         <span className="text-sm text-slate-500 whitespace-nowrap">
           {d.izlenmeTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
