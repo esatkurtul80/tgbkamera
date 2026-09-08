@@ -78,7 +78,7 @@ function CevapCell({ cevap, not, onSet }: { cevap: CevapSecenegi | undefined; no
       <button
         onClick={() => onSet(CEVAP_CYCLE[cevap])}
         title={not}
-        className={`relative w-full h-[36px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
+        className={`relative w-full h-[28px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
         {label}
         {notRozeti}
       </button>
@@ -86,7 +86,7 @@ function CevapCell({ cevap, not, onSet }: { cevap: CevapSecenegi | undefined; no
   }
 
   return (
-    <div className="w-full h-[36px] relative group/cell" title={not}>
+    <div className="w-full h-[28px] relative group/cell" title={not}>
       <div className="absolute inset-0 flex border border-dashed border-slate-200 bg-transparent rounded-[4px] group-hover/cell:opacity-0 transition-opacity"></div>
       <div className="absolute inset-0 flex opacity-0 group-hover/cell:opacity-100 transition-opacity">
         <button onClick={() => onSet("evet")} className="flex-1 flex items-center justify-center bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 font-bold text-[10px] rounded-l-[4px]">E</button>
@@ -898,11 +898,11 @@ function YeniDegerlendirmeIcerik() {
                     <tr key={soru.id} className="group">
 
                       {/* Soru sütunu sticky */}
-                      <td className="sticky left-0 z-10 px-3 py-1.5 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] bg-white align-middle"
+                      <td className="sticky left-0 z-10 px-3 py-1 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] bg-white align-middle"
                         style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
                         <div className="flex gap-2.5">
                           <span className="text-slate-300 font-bold text-xs min-w-[16px] leading-tight">{qIdx + 1}</span>
-                          <p className="text-[11px] font-medium text-slate-700 leading-tight">{soru.metin}</p>
+                          <p className="text-[9px] font-medium text-slate-700 leading-tight">{soru.metin}</p>
                         </div>
                       </td>
 
@@ -913,8 +913,8 @@ function YeniDegerlendirmeIcerik() {
                         if (obs.length === 0) {
                           return [
                             <td key={`empty-${gun}`}
-                              className={`border-l border-b border-slate-100 p-1.5 align-middle bg-white group-hover:bg-slate-50 transition-colors`}
-                              style={{ width: 85, minWidth: 85, height: 40 }} />
+                              className={`border-l border-b border-slate-100 p-1 align-middle bg-white group-hover:bg-slate-50 transition-colors`}
+                              style={{ width: 85, minWidth: 85, height: 32 }} />
                           ];
                         }
 
@@ -929,7 +929,7 @@ function YeniDegerlendirmeIcerik() {
                             <td key={`kapali-${gun}`}
                               onClick={() => gunAcKapa(gun)}
                               className="border-l border-b border-blue-200/70 p-1 align-middle bg-blue-100/70 group-hover:bg-blue-200/70 transition-colors cursor-pointer"
-                              style={{ width: 85, minWidth: 85, height: 40 }}
+                              style={{ width: 85, minWidth: 85, height: 32 }}
                               title="Saatleri açmak için tıklayın">
                               {e + h + m > 0 ? (
                                 <div className="flex items-center justify-center gap-[2px]">
@@ -952,8 +952,8 @@ function YeniDegerlendirmeIcerik() {
                               e.preventDefault();
                               setCtxMenu({ x: e.clientX, y: e.clientY, izId: iz.id, soruId: soru.id });
                             }}
-                            className={`border-l border-b border-slate-100 p-1.5 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
-                            style={{ width: 85, minWidth: 85, height: 40 }}>
+                            className={`border-l border-b border-slate-100 p-1 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
+                            style={{ width: 85, minWidth: 85, height: 32 }}>
                             <CevapCell
                               cevap={iz.cevaplar[soru.id]}
                               not={iz.notlar?.[soru.id]}
