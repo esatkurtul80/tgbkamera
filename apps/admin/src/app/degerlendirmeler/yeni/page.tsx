@@ -715,19 +715,19 @@ function YeniDegerlendirmeIcerik() {
     <div className="flex flex-col h-full">
 
       {/* ── Üst bilgi ve geri butonu ───────────────────────────────────────── */}
-      <div className="shrink-0 bg-slate-900 text-white px-8 py-4 flex items-center justify-between z-10 shadow-sm">
+      <div className="shrink-0 bg-slate-900 text-white px-6 py-1.5 flex items-center justify-between z-10 shadow-sm">
         <div className="flex items-center gap-6 min-w-0">
-          <h1 className="text-lg font-bold uppercase tracking-tight truncate">
+          <h1 className="text-sm font-bold uppercase tracking-tight truncate">
             {magazaRaporuMu ? `${magaza?.ad} (Mağaza Raporu)` : personel?.ad}{" "}
-            <span className="text-slate-400 font-normal text-sm ml-3">{magaza?.ad} / {bolumDetaylar.map(b => b.ad).join(", ")}</span>
+            <span className="text-slate-400 font-normal text-xs ml-3">{magaza?.ad} / {bolumDetaylar.map(b => b.ad).join(", ")}</span>
           </h1>
-          <div className="h-8 w-px bg-white/20 shrink-0"></div>
+          <div className="h-5 w-px bg-white/20 shrink-0"></div>
           {puan && puan.maxPuan > 0 && (
             <div className="flex gap-6 items-center shrink-0">
               <div className="text-[11px] uppercase text-slate-400 font-bold tracking-widest">Genel Başarı</div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-emerald-400">{puan.toplamPuan}</span>
-                <span className="text-sm text-emerald-400/60">/ {puan.maxPuan} Puan</span>
+                <span className="text-base font-bold text-emerald-400">{puan.toplamPuan}</span>
+                <span className="text-xs text-emerald-400/60">/ {puan.maxPuan} Puan</span>
               </div>
             </div>
           )}
