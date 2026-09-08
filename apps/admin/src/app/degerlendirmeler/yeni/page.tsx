@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff, StickyNote, Copy, ClipboardPaste } from "lucide-react";
+import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff, StickyNote, Copy, ClipboardPaste, ChevronsLeft, ChevronsRight } from "lucide-react";
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
@@ -78,7 +78,7 @@ function CevapCell({ cevap, not, onSet }: { cevap: CevapSecenegi | undefined; no
       <button
         onClick={() => onSet(CEVAP_CYCLE[cevap])}
         title={not}
-        className={`relative w-full h-[44px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
+        className={`relative w-full h-[36px] flex items-center justify-center rounded-[4px] text-white text-[11px] font-bold tracking-[0.05em] uppercase transition-colors ${bg} ${hoverBg}`}>
         {label}
         {notRozeti}
       </button>
@@ -86,7 +86,7 @@ function CevapCell({ cevap, not, onSet }: { cevap: CevapSecenegi | undefined; no
   }
 
   return (
-    <div className="w-full h-[44px] relative group/cell" title={not}>
+    <div className="w-full h-[36px] relative group/cell" title={not}>
       <div className="absolute inset-0 flex border border-dashed border-slate-200 bg-transparent rounded-[4px] group-hover/cell:opacity-0 transition-opacity"></div>
       <div className="absolute inset-0 flex opacity-0 group-hover/cell:opacity-100 transition-opacity">
         <button onClick={() => onSet("evet")} className="flex-1 flex items-center justify-center bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 font-bold text-[10px] rounded-l-[4px]">E</button>
@@ -167,6 +167,14 @@ function YeniDegerlendirmeIcerik() {
   const [izlenmeler,   setIzlenmeler] = useState<IzlenmeLocal[]>([]);
   const [onaylaId,     setOnaylaId]   = useState<string | null>(null); // silme onay
   const [hoverCol,     setHoverCol]   = useState<string | null>(null);
+  // Birden fazla saat eklenmiş günler: kapalıysa tek sütuna daraltılıp özet gösterilir.
+  const [kapaliGunler, setKapaliGunler] = useState<Set<number>>(new Set());
+  const gunAcKapa = (gun: number) =>
+    setKapaliGunler(prev => {
+      const next = new Set(prev);
+      if (next.has(gun)) next.delete(gun); else next.add(gun);
+      return next;
+    });
   // Hücre sağ tık menüsü + not düzenleme + hücre panosu (kopyala/yapıştır)
   const [ctxMenu,      setCtxMenu]    = useState<{ x: number; y: number; izId: string; soruId: string } | null>(null);
   const [notDuzenle,   setNotDuzenle] = useState<{ izId: string; soruId: string; taslak: string } | null>(null);
@@ -460,6 +468,25 @@ function YeniDegerlendirmeIcerik() {
     return map;
   }, [izlenmeler, seciliAy, seciliYil, gunSayisi]);
 
+  // Gün → gözlem sayısı: o günün saat sütunlarında en çok işaretlenen (E/H/M)
+  // sorunun işaret adedi. Açılan sütun sayısı değil, fiilen yapılan gözlem sayısıdır.
+  const gunGozlemMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const [gun, obs] of gunlukMap) {
+      const sayac: Record<string, number> = {};
+      let max = 0;
+      for (const iz of obs) {
+        for (const [soruId, c] of Object.entries(iz.cevaplar)) {
+          if (c !== "evet" && c !== "hayir" && c !== "muaf") continue;
+          sayac[soruId] = (sayac[soruId] ?? 0) + 1;
+          if (sayac[soruId] > max) max = sayac[soruId];
+        }
+      }
+      map.set(gun, max);
+    }
+    return map;
+  }, [gunlukMap]);
+
   function izlenmeEkle(gun: number) {
     // Saat kasıtlı olarak 00:00 — kullanıcı gerçek saati kendi yazsın, "şu an"ki saat otomatik gelmesin.
     const t = new Date(seciliYil, seciliAy, gun, 0, 0);
@@ -685,7 +712,7 @@ function YeniDegerlendirmeIcerik() {
     : "text-rose-600 bg-rose-50 border-rose-200";
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-full">
 
       {/* ── Üst bilgi ve geri butonu ───────────────────────────────────────── */}
       <div className="shrink-0 bg-slate-900 text-white px-8 py-4 flex items-center justify-between z-10 shadow-sm">
@@ -729,7 +756,7 @@ function YeniDegerlendirmeIcerik() {
       </div>
 
       {/* ── Matris tablosu ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto border-t border-slate-200 bg-white shadow-sm">
+      <div className="flex-1 min-h-0 overflow-auto border-t border-slate-200 bg-white shadow-sm">
         <table className="border-collapse" style={{ tableLayout: "fixed" }}>
 
           {/* Thead — sticky */}
@@ -739,20 +766,33 @@ function YeniDegerlendirmeIcerik() {
             <tr>
               <th rowSpan={2}
                 className="sticky left-0 z-40 bg-slate-50 border-b border-r border-slate-200 p-4 text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] align-bottom"
-                style={{ width: 320, minWidth: 320, maxWidth: 320 }}>
+                style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Denetim Soruları</span>
               </th>
 
               {ayinGunleri.map(gun => {
                 const d       = new Date(seciliYil, seciliAy, gun);
                 const obs     = gunlukMap.get(gun) ?? [];
+                const kapali  = obs.length > 1 && kapaliGunler.has(gun);
+                const span    = kapali ? 1 : Math.max(1, obs.length);
                 return (
-                  <th key={gun} colSpan={Math.max(1, obs.length)}
+                  <th key={gun} colSpan={span}
                     className="border-b border-slate-200 p-0 text-center"
-                    style={{ minWidth: Math.max(1, obs.length) * 85 }}>
-                    <div className="py-2.5 flex flex-col items-center justify-center border-l border-slate-200/50 bg-slate-50/50">
+                    style={{ minWidth: span * 85 }}>
+                    <div className={`relative py-2 flex flex-col items-center justify-center border-l ${kapali ? "border-blue-200 bg-blue-100" : "border-slate-200/50 bg-slate-50/50"}`}>
                       <span className="text-[11px] font-bold text-slate-700">{String(gun).padStart(2,"0")}</span>
                       <span className="text-[9px] text-slate-400 font-medium uppercase">{GUN_TR[d.getDay()]}</span>
+                      {obs.length > 1 && (
+                        <button
+                          onClick={() => gunAcKapa(gun)}
+                          className={`absolute top-1 right-1 inline-flex items-center gap-0.5 px-1 h-[15px] rounded text-[9px] font-bold transition-colors ${
+                            kapali ? "bg-blue-100 text-blue-700 hover:bg-blue-200" : "bg-slate-200/70 text-slate-500 hover:bg-slate-300"
+                          }`}
+                          title={kapali ? `${obs.length} saati aç` : `${obs.length} saati tek sütuna daralt`}>
+                          {kapali ? <ChevronsRight size={10} strokeWidth={2.5} /> : <ChevronsLeft size={10} strokeWidth={2.5} />}
+                          {gunGozlemMap.get(gun) ?? 0}
+                        </button>
+                      )}
                     </div>
                   </th>
                 );
@@ -771,6 +811,20 @@ function YeniDegerlendirmeIcerik() {
             <tr>
               {ayinGunleri.flatMap(gun => {
                 const obs     = gunlukMap.get(gun) ?? [];
+
+                if (obs.length > 1 && kapaliGunler.has(gun)) {
+                  return [
+                    <th key={`kapali-${gun}`}
+                      className="bg-blue-100 py-2 border-t border-l border-blue-200 px-1 transition-colors"
+                      style={{ width: 85, minWidth: 85, borderBottom: "1px solid #e2e8f0" }}>
+                      <button onClick={() => gunAcKapa(gun)}
+                        className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Saatleri aç">
+                        <ChevronsRight size={12} strokeWidth={2.5} /> {gunGozlemMap.get(gun) ?? 0} gözlem
+                      </button>
+                    </th>
+                  ];
+                }
 
                 if (obs.length === 0) {
                   return [
@@ -844,23 +898,49 @@ function YeniDegerlendirmeIcerik() {
                     <tr key={soru.id} className="group">
 
                       {/* Soru sütunu sticky */}
-                      <td className="sticky left-0 z-10 p-4 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] bg-white align-middle"
-                        style={{ width: 420, minWidth: 420, maxWidth: 420 }}>
-                        <div className="flex gap-4">
-                          <span className="text-slate-300 font-bold min-w-[20px]">{qIdx + 1}</span>
-                          <p className="text-sm font-medium text-slate-700 leading-snug">{soru.metin}</p>
+                      <td className="sticky left-0 z-10 px-3 py-1.5 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] bg-white align-middle"
+                        style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
+                        <div className="flex gap-2.5">
+                          <span className="text-slate-300 font-bold text-xs min-w-[16px] leading-tight">{qIdx + 1}</span>
+                          <p className="text-xs font-medium text-slate-700 leading-tight">{soru.metin}</p>
                         </div>
                       </td>
 
                       {/* Cevap hücreleri */}
                       {ayinGunleri.flatMap(gun => {
                         const obs = gunlukMap.get(gun) ?? [];
-                        
+
                         if (obs.length === 0) {
                           return [
                             <td key={`empty-${gun}`}
-                              className={`border-l border-b border-slate-100 p-2 align-middle bg-white group-hover:bg-slate-50 transition-colors`}
-                              style={{ width: 85, minWidth: 85, height: 60 }} />
+                              className={`border-l border-b border-slate-100 p-1.5 align-middle bg-white group-hover:bg-slate-50 transition-colors`}
+                              style={{ width: 85, minWidth: 85, height: 40 }} />
+                          ];
+                        }
+
+                        // Daraltılmış gün: o günün saatlerindeki cevapların özeti (E/H/M sayıları)
+                        if (obs.length > 1 && kapaliGunler.has(gun)) {
+                          let e = 0, h = 0, m = 0;
+                          for (const iz of obs) {
+                            const c = iz.cevaplar[soru.id];
+                            if (c === "evet") e++; else if (c === "hayir") h++; else if (c === "muaf") m++;
+                          }
+                          return [
+                            <td key={`kapali-${gun}`}
+                              onClick={() => gunAcKapa(gun)}
+                              className="border-l border-b border-blue-200/70 p-1 align-middle bg-blue-100/70 group-hover:bg-blue-200/70 transition-colors cursor-pointer"
+                              style={{ width: 85, minWidth: 85, height: 40 }}
+                              title="Saatleri açmak için tıklayın">
+                              {e + h + m > 0 ? (
+                                <div className="flex items-center justify-center gap-[2px]">
+                                  {e > 0 && <span className="inline-flex items-center justify-center min-w-[18px] h-[15px] px-0.5 rounded-[3px] text-[9px] font-bold text-white bg-emerald-500">{e}E</span>}
+                                  {h > 0 && <span className="inline-flex items-center justify-center min-w-[18px] h-[15px] px-0.5 rounded-[3px] text-[9px] font-bold text-white bg-rose-500">{h}H</span>}
+                                  {m > 0 && <span className="inline-flex items-center justify-center min-w-[18px] h-[15px] px-0.5 rounded-[3px] text-[9px] font-bold text-white bg-slate-400">{m}M</span>}
+                                </div>
+                              ) : (
+                                <div className="text-center text-[10px] text-slate-300">-</div>
+                              )}
+                            </td>
                           ];
                         }
 
@@ -872,8 +952,8 @@ function YeniDegerlendirmeIcerik() {
                               e.preventDefault();
                               setCtxMenu({ x: e.clientX, y: e.clientY, izId: iz.id, soruId: soru.id });
                             }}
-                            className={`border-l border-b border-slate-100 p-2 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
-                            style={{ width: 85, minWidth: 85, height: 60 }}>
+                            className={`border-l border-b border-slate-100 p-1.5 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
+                            style={{ width: 85, minWidth: 85, height: 40 }}>
                             <CevapCell
                               cevap={iz.cevaplar[soru.id]}
                               not={iz.notlar?.[soru.id]}

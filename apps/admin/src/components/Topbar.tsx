@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Bell, LogOut, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROL_ETIKETLERI } from "@/types";
@@ -8,6 +9,10 @@ import { ROL_ETIKETLERI } from "@/types";
 export default function Topbar() {
   const { user, kullanici, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  // Rapor matrisi sayfasında dar/bölünmüş ekranda (ör. kamera izleme yanında)
+  // dikey yer kazanmak için üst çubuk yalnız geniş (xl+) ekranlarda gösterilir.
+  const raporMatrisi = pathname?.startsWith("/degerlendirmeler/yeni") ?? false;
 
   const initials = (kullanici?.displayName ?? user?.displayName ?? "?")
     .split(" ")
@@ -17,7 +22,7 @@ export default function Topbar() {
     .toUpperCase();
 
   return (
-    <header className="h-14 bg-white border-b border-slate-100 flex items-center px-6 gap-4 shrink-0 relative z-10">
+    <header className={`h-14 bg-white border-b border-slate-100 items-center px-6 gap-4 shrink-0 relative z-10 ${raporMatrisi ? "hidden xl:flex" : "flex"}`}>
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">

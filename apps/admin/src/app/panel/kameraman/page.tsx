@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getBolgeler, updateKullaniciFavoriMagazalar } from "@/lib/firestore";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import type { Degerlendirme, Magaza, Personel, Form, Bolge } from "@/types";
+import type { Degerlendirme, Magaza, Personel, Form, Bolge, CevapSecenegi } from "@/types";
 
 interface KameramanStats {
   buAyDeg: number;
@@ -263,6 +263,37 @@ export default function KameramanPaneliPage() {
       const list = map[d.personelId] ?? (map[d.personelId] = []);
       if (!list.some((m) => m.magazaId === d.magazaId)) {
         list.push({ magazaId: d.magazaId, magazaAd: d.magazaAd ?? "" });
+      }
+    }
+    return map;
+  }, [buAyTumRaporlar]);
+
+  // Personel → mağaza bazında bu ayki izleme/puansız rapor özeti (kim raporladıysa fark etmez).
+  // İzleme sayısı: puanlı raporlarda en çok işaretlenen (evet/hayır/muaf) sorunun işaret adedi.
+  // Puansız raporlar ise adet olarak sayılır. Mağaza raporları (personelsiz) hariç tutulur.
+  const personelIzlemeOzeti = useMemo(() => {
+    const soruSayac: Record<string, Record<string, Record<string, number>>> = {};
+    const map: Record<string, Record<string, { magazaAd: string; izleme: number; puansiz: number }>> = {};
+    for (const d of buAyTumRaporlar) {
+      if (d.magazaRaporu || !d.personelId || !d.magazaId) continue;
+      const perMagaza = map[d.personelId] ?? (map[d.personelId] = {});
+      const entry = perMagaza[d.magazaId] ?? (perMagaza[d.magazaId] = { magazaAd: d.magazaAd ?? "", izleme: 0, puansiz: 0 });
+      if (!d.puanli) {
+        entry.puansiz += 1;
+        continue;
+      }
+      const personelSayac = soruSayac[d.personelId] ?? (soruSayac[d.personelId] = {});
+      const sayac = personelSayac[d.magazaId] ?? (personelSayac[d.magazaId] = {});
+      // Puanlı raporlarda cevaplar izlenme anları (izlenmeler[].cevaplar) altında tutulur;
+      // eski tek-cevap formatı (d.cevaplar) yalnızca izlenmeler boşsa yedek olarak sayılır.
+      const cevapSetleri: Record<string, CevapSecenegi>[] =
+        d.izlenmeler && d.izlenmeler.length > 0 ? d.izlenmeler.map((iz) => iz.cevaplar ?? {}) : [d.cevaplar ?? {}];
+      for (const cevaplar of cevapSetleri) {
+        for (const [soruId, cevap] of Object.entries(cevaplar)) {
+          if (cevap !== "evet" && cevap !== "hayir" && cevap !== "muaf") continue;
+          sayac[soruId] = (sayac[soruId] ?? 0) + 1;
+          if (sayac[soruId] > entry.izleme) entry.izleme = sayac[soruId];
+        }
       }
     }
     return map;
@@ -644,7 +675,37 @@ export default function KameramanPaneliPage() {
                           <span className="text-xs font-bold text-indigo-600">{p.ad.charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{p.ad}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-slate-800 truncate">{p.ad}</p>
+                            {(() => {
+                              const ozet = personelIzlemeOzeti[p.id] || {};
+                              const bu = ozet[activeMagaza.id];
+                              const digerler = Object.entries(ozet).filter(([mId, o]) => mId !== activeMagaza.id && (o.izleme > 0 || o.puansiz > 0));
+                              if (!bu && digerler.length === 0) return null;
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {bu && bu.izleme > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-semibold border border-indigo-100" title="Bu ay bu mağazadaki gözlem sayısı (puanlı raporlar)">
+                                      {bu.izleme} gözlem
+                                    </span>
+                                  )}
+                                  {bu && bu.puansiz > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold border border-slate-200" title="Bu ay bu mağazadaki puansız rapor sayısı">
+                                      {bu.puansiz} puansız rapor
+                                    </span>
+                                  )}
+                                  {digerler.map(([mId, o]) => (
+                                    <span key={mId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-semibold border border-amber-100" title={`Bu ay başka mağazada raporlandı: ${o.magazaAd}`}>
+                                      <Store size={10} /> {o.magazaAd || "Diğer mağaza"}:
+                                      {o.izleme > 0 && ` ${o.izleme} gözlem`}
+                                      {o.izleme > 0 && o.puansiz > 0 && " ·"}
+                                      {o.puansiz > 0 && ` ${o.puansiz} puansız rapor`}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
                           {p.tc && <p className="text-xs text-slate-400 font-mono mt-0.5">{p.tc}</p>}
                         </div>
                       </div>
