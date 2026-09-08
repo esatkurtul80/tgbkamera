@@ -10,7 +10,7 @@ import {
   pdfRaporBloklariOlustur,
   RaporBant,
   RaporMetaAlan,
-  SonRaporlarAlani,
+  SonAyPuanTablosu,
   PDF_SAYFA_GENISLIK,
   RAPOR_RENK,
   RAPOR_MONO,
@@ -213,6 +213,7 @@ export default function DegerlendirmeRaporPage() {
                 kunyeFont={kunyeFont}
                 boyut={tasarim.boyutlar.kunye}
               />
+              <SonAyPuanTablosu raporlar={sonRaporlar} kunyeFont={kunyeFont} />
             </div>
             {d.puanli && d.toplamPuan !== null && (
               <div
@@ -234,11 +235,6 @@ export default function DegerlendirmeRaporPage() {
             )}
           </div>
 
-          {sonRaporlar.length > 0 && (
-            <div className="mt-3.5">
-              <SonRaporlarAlani raporlar={sonRaporlar} tasarim={tasarim} />
-            </div>
-          )}
         </div>
       )}
 

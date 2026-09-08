@@ -72,7 +72,7 @@ function ornekDegerlendirme(): Degerlendirme {
   } as unknown as Degerlendirme;
 }
 
-/** Önizlemedeki "Son 3 Rapor Puanı" alanı için örnek geçmiş raporlar. */
+/** Önizlemedeki "Son 3 Ay Puanı" alanı için örnek geçmiş raporlar (son 3 aya bir tane). */
 function ornekSonRaporlar(): Degerlendirme[] {
   const gun = 24 * 60 * 60 * 1000;
   return [

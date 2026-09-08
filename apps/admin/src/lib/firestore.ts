@@ -547,31 +547,40 @@ export async function getDegerlendirme(id: string): Promise<Degerlendirme | null
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Degerlendirme) : null;
 }
 
+/** Raporun ait olduğu ay (0-11) ve yıl — `ay/yil` alanı yoksa oluşturma tarihinden. */
+export function raporAyYil(r: Pick<Degerlendirme, "ay" | "yil" | "olusturmaTarihi">): { ay: number; yil: number } | null {
+  if (typeof r.ay === "number" && typeof r.yil === "number") return { ay: r.ay, yil: r.yil };
+  const t = r.olusturmaTarihi?.toDate?.();
+  return t ? { ay: t.getMonth(), yil: t.getFullYear() } : null;
+}
+
 /**
- * Bir personelin, verilen rapordan önce oluşturulmuş son `adet` puanlı (toplamPuan
- * girilmiş) kapalı raporunu döner — rapor PDF'lerindeki "Son Rapor Puanları" alanı için.
+ * Bir personelin, verilen raporun ayı dahil son `aySayisi` takvim ayındaki puanlı
+ * (toplamPuan girilmiş) kapalı raporlarını döner (en yeni önce) — rapor PDF'lerindeki
+ * "Son 3 Ay Puanı" alanı için. Raporun kendisi ve açık raporlar hariç.
  * Mevcut personelId+olusturmaTarihi index'ini kullanır; kalan filtreler client'ta yapılır.
  */
-export async function getOncekiRaporPuanlari(d: Degerlendirme, adet = 3): Promise<Degerlendirme[]> {
+export async function getOncekiRaporPuanlari(d: Degerlendirme, aySayisi = 3): Promise<Degerlendirme[]> {
   const snap = await getDocs(
     query(
       collection(db, "degerlendirmeler"),
       where("personelId", "==", d.personelId),
       orderBy("olusturmaTarihi", "desc"),
-      limit(30)
+      limit(60)
     )
   );
-  const suAn = d.olusturmaTarihi?.toMillis() ?? Infinity;
+  const referans = raporAyYil(d) ?? { ay: new Date().getMonth(), yil: new Date().getFullYear() };
+  const ustSinir = referans.yil * 12 + referans.ay;          // raporun ayı dahil
+  const altSinir = ustSinir - (aySayisi - 1);                 // aySayisi ay geriye
   return snap.docs
     .map((x) => toDoc<Degerlendirme>(x))
-    .filter(
-      (r) =>
-        r.id !== d.id &&
-        r.durum !== "acik" &&
-        r.toplamPuan !== null &&
-        (r.olusturmaTarihi?.toMillis() ?? 0) < suAn
-    )
-    .slice(0, adet);
+    .filter((r) => {
+      if (r.id === d.id || r.durum === "acik" || r.toplamPuan === null || !r.puanli) return false;
+      const ay = raporAyYil(r);
+      if (!ay) return false;
+      const idx = ay.yil * 12 + ay.ay;
+      return idx >= altSinir && idx <= ustSinir;
+    });
 }
 
 export async function createDegerlendirme(

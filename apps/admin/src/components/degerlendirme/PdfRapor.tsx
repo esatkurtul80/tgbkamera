@@ -34,7 +34,7 @@ const MONO = RAPOR_MONO;
 
 /** Sayfalamada bölünmez birim: rapor başlığı, bölüm başlığı, soru kartı veya fotoğraf satırı. */
 export interface PdfBlok {
-  tur: "baslik" | "sonpuanlar" | "bolum" | "soru" | "foto";
+  tur: "baslik" | "bolum" | "soru" | "foto";
   el: React.ReactNode;
 }
 
@@ -159,7 +159,7 @@ export function RaporBant({ tasarim, rozet }: { tasarim: RaporTasarimAyarlari; r
   );
 }
 
-function RaporBaslik({ d, tasarim }: { d: Degerlendirme; tasarim: RaporTasarimAyarlari }) {
+function RaporBaslik({ d, tasarim, sonRaporlar = [] }: { d: Degerlendirme; tasarim: RaporTasarimAyarlari; sonRaporlar?: Degerlendirme[] }) {
   const isYorumluPuanli = d.puanli === true && d.puanGirisTipi === "manuel";
   const izlenme = d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
   const olusturma = d.olusturmaTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
@@ -187,6 +187,7 @@ function RaporBaslik({ d, tasarim }: { d: Degerlendirme; tasarim: RaporTasarimAy
           <RaporMetaAlan etiket="Mağaza" deger={d.magazaAd ?? ""} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
           <RaporMetaAlan etiket="İzlenme Tarihi" deger={izlenme} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
           <RaporMetaAlan etiket="Raporlama Tarihi" deger={olusturma} kunyeFont={kunyeFont} boyut={tasarim.boyutlar.kunye} />
+          <SonAyPuanTablosu raporlar={sonRaporlar} kunyeFont={kunyeFont} />
         </div>
         {isYorumluPuanli && d.toplamPuan !== null && (
           <div
@@ -206,53 +207,81 @@ function RaporBaslik({ d, tasarim }: { d: Degerlendirme; tasarim: RaporTasarimAy
   );
 }
 
-/** Personelin önceki (en fazla 3) rapor puanını raporlama tarihleriyle gösteren alan.
- *  Hem puanlı hem puansız rapor PDF'lerinde künyenin hemen altında yer alır. */
-export function SonRaporlarAlani({ raporlar, tasarim }: { raporlar: Degerlendirme[]; tasarim: RaporTasarimAyarlari }) {
-  if (raporlar.length === 0) return null;
-  const kunyeFont = fontCss(tasarim.fontlar.kunye);
+const AY_ADLARI = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+/** Raporun ait olduğu ay/yıl — `ay/yil` alanı yoksa oluşturma tarihinden. */
+function raporAyYil(r: Degerlendirme): { ay: number; yil: number } | null {
+  if (typeof r.ay === "number" && typeof r.yil === "number") return { ay: r.ay, yil: r.yil };
+  const t = r.olusturmaTarihi?.toDate?.();
+  return t ? { ay: t.getMonth(), yil: t.getFullYear() } : null;
+}
+
+/** Bir raporun 100 üzerinden puanı (maxPuan yoksa toplamPuan olduğu gibi). */
+function raporYuzde(r: Degerlendirme): number | null {
+  if (r.toplamPuan === null || r.toplamPuan === undefined) return null;
+  return r.maxPuan && r.maxPuan > 0 ? Math.round((r.toplamPuan / r.maxPuan) * 100) : r.toplamPuan;
+}
+
+/** Son 3 ayın puanları: aya göre gruplanır (aynı ayda birden fazla puanlı rapor → ortalama),
+ *  en yeni 3 ay seçilir ve eskiden yeniye (Temmuz → Ağustos → Eylül) sıralanır. */
+function sonAyPuanlariHesapla(raporlar: Degerlendirme[]) {
+  const gruplar = new Map<number, { ay: number; yil: number; puanlar: number[]; formlar: string[] }>();
+  for (const r of raporlar) {
+    const ayYil = raporAyYil(r);
+    const yuzde = raporYuzde(r);
+    if (!ayYil || yuzde === null) continue;
+    const idx = ayYil.yil * 12 + ayYil.ay;
+    const g = gruplar.get(idx) ?? { ...ayYil, puanlar: [], formlar: [] };
+    g.puanlar.push(yuzde);
+    if (r.formAd && !g.formlar.includes(r.formAd)) g.formlar.push(r.formAd);
+    gruplar.set(idx, g);
+  }
+  return [...gruplar.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, 3)
+    .reverse()
+    .map(([, g]) => ({
+      ...g,
+      ortalama: Math.round(g.puanlar.reduce((s, p) => s + p, 0) / g.puanlar.length),
+    }));
+}
+
+/** Künye kartının içine, alanların altına eklenen "Son 3 Ay Puanı" tablosu (ayrı kart değil).
+ *  Kartın 4 sütunlu ızgarasında tam satır kaplar. Puan "%" işareti olmadan yazılır.
+ *  Hem puanlı hem puansız rapor PDF'lerinde yer alır. Veri yoksa hiç render edilmez. */
+export function SonAyPuanTablosu({ raporlar, kunyeFont }: { raporlar: Degerlendirme[]; kunyeFont: string }) {
+  const aylar = sonAyPuanlariHesapla(raporlar);
+  if (aylar.length === 0) return null;
+  const etiketCls = "text-[9px] font-semibold uppercase";
+  const etiketStil: React.CSSProperties = { color: RAPOR_RENK.faint, letterSpacing: "0.12em", fontFamily: MONO };
   return (
-    <div
-      className="rounded-xl px-6 py-4"
-      style={{ background: RAPOR_RENK.metaBg, border: `1px solid ${RAPOR_RENK.line}` }}
-    >
-      <p
-        className="text-[9px] font-semibold uppercase mt-0 mb-3"
-        style={{ color: RAPOR_RENK.faint, letterSpacing: "0.12em", fontFamily: MONO }}
-      >
-        Son {raporlar.length} Rapor Puanı
-      </p>
-      <div className="flex gap-3">
-        {raporlar.map((r) => {
-          const yuzde =
-            r.toplamPuan !== null && r.maxPuan && r.maxPuan > 0
-              ? Math.round((r.toplamPuan / r.maxPuan) * 100)
-              : null;
-          const tarih = r.olusturmaTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
-          return (
-            <div
-              key={r.id}
-              className="flex-1 min-w-0 flex items-center justify-between gap-3 rounded-[10px] px-4 py-3"
-              style={{ background: "#ffffff", border: `1px solid ${RAPOR_RENK.line}` }}
-            >
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase m-0" style={{ color: RAPOR_RENK.faint, letterSpacing: "0.1em", fontFamily: MONO }}>
-                  Raporlama Tarihi
-                </p>
-                <p className="text-[11px] font-bold m-0 mt-0.5" style={{ color: RAPOR_RENK.ink, fontFamily: MONO }}>
-                  {tarih}
-                </p>
-                <p className="text-[9px] m-0 mt-0.5 truncate" style={{ color: RAPOR_RENK.faint, fontFamily: kunyeFont }}>
-                  {r.formAd}
-                </p>
-              </div>
-              <b className="text-[17px] shrink-0" style={{ color: RAPOR_RENK.accent, fontFamily: MONO }}>
-                {yuzde !== null ? `%${yuzde}` : r.toplamPuan}
-              </b>
-            </div>
-          );
-        })}
-      </div>
+    <div className="col-span-4 pt-3" style={{ borderTop: `1px solid ${RAPOR_RENK.line}` }}>
+      <p className={`${etiketCls} m-0 mb-1.5`} style={etiketStil}>Son {aylar.length} Ay Puanı</p>
+      <table className="border-collapse" style={{ width: "auto" }}>
+        <thead>
+          <tr>
+            <th className={`${etiketCls} text-left pr-8 pb-1`} style={etiketStil}>Ay</th>
+            <th className={`${etiketCls} text-right pb-1`} style={etiketStil}>Puan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {aylar.map((g) => (
+            <tr key={`${g.yil}-${g.ay}`} title={g.formlar.join(", ")}>
+              <td className="text-[11px] font-bold uppercase pr-8 py-0.5" style={{ color: RAPOR_RENK.ink, fontFamily: MONO, letterSpacing: "0.04em" }}>
+                {AY_ADLARI[g.ay].toLocaleUpperCase("tr-TR")} {g.yil}
+                {g.puanlar.length > 1 && (
+                  <span className="font-medium normal-case ml-1.5" style={{ color: RAPOR_RENK.faint, fontFamily: kunyeFont }}>
+                    ({g.puanlar.length} rapor ortalaması)
+                  </span>
+                )}
+              </td>
+              <td className="text-[13px] font-extrabold text-right py-0.5" style={{ color: RAPOR_RENK.accent, fontFamily: MONO }}>
+                {g.ortalama}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -392,17 +421,8 @@ export function pdfRaporBloklariOlustur(
   tasarim: RaporTasarimAyarlari,
   sonRaporlar?: Degerlendirme[]
 ): PdfBlok[] {
-  const bloklar: PdfBlok[] = [{ tur: "baslik", el: <RaporBaslik d={d} tasarim={tasarim} /> }];
-  if (sonRaporlar && sonRaporlar.length > 0) {
-    bloklar.push({
-      tur: "sonpuanlar",
-      el: (
-        <div className="pb-5">
-          <SonRaporlarAlani raporlar={sonRaporlar} tasarim={tasarim} />
-        </div>
-      ),
-    });
-  }
+  // Son 3 ay puanı künye kartının içinde tablo olarak yer alır (ayrı blok değil).
+  const bloklar: PdfBlok[] = [{ tur: "baslik", el: <RaporBaslik d={d} tasarim={tasarim} sonRaporlar={sonRaporlar} /> }];
   const bolumBaslikFont = fontCss(tasarim.fontlar.bolumBaslik);
 
   Object.keys(d.bolumSnapshot).forEach((bolumId, bolumIdx) => {

@@ -219,6 +219,26 @@ function YeniDegerlendirmeIcerik() {
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
   const [degId, setDegId] = useState<string | null>(null);
+  // Kapalı gün grupları rapor bazında tarayıcıda hatırlanır (sayfa kapatılıp açılınca korunur).
+  const kapaliGunlerKey = degId ? `tgb.matris.kapaliGunler.${degId}` : null;
+  const kapaliGunlerYuklendi = useRef<string | null>(null);
+  useEffect(() => {
+    if (!kapaliGunlerKey) return;
+    try {
+      const raw = localStorage.getItem(kapaliGunlerKey);
+      const list: unknown = raw ? JSON.parse(raw) : [];
+      setKapaliGunler(new Set(Array.isArray(list) ? list.filter((g): g is number => typeof g === "number") : []));
+    } catch { setKapaliGunler(new Set()); }
+    kapaliGunlerYuklendi.current = kapaliGunlerKey;
+  }, [kapaliGunlerKey]);
+  useEffect(() => {
+    // İlk yükleme tamamlanmadan boş set'i yazıp kayıtlı durumu ezmeyelim.
+    if (!kapaliGunlerKey || kapaliGunlerYuklendi.current !== kapaliGunlerKey) return;
+    try {
+      if (kapaliGunler.size === 0) localStorage.removeItem(kapaliGunlerKey);
+      else localStorage.setItem(kapaliGunlerKey, JSON.stringify([...kapaliGunler]));
+    } catch { /* yoksay */ }
+  }, [kapaliGunler, kapaliGunlerKey]);
   // Param'dan veya devam edilen kayıttan gelen mağaza raporu bilgisi
   const [magazaRaporuMu, setMagazaRaporuMu] = useState(false);
   // Devam edilen açık puansız raporun mevcut cevapları (varsa)

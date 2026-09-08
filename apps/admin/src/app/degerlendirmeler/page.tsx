@@ -362,27 +362,33 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
     });
   }
 
+  // Tablonun o an gösterdiği (sütun filtreleri uygulanmış) satırlar — "tümünü seç"
+  // yalnız bunları hedefler, filtre dışındaki kayıtlar seçilmez.
+  const [gorunenListe, setGorunenListe] = useState<Degerlendirme[]>([]);
+  const gorunenTumuSecili =
+    gorunenListe.length > 0 && gorunenListe.every((d) => secilenler.has(d.id));
+
   function toggleTumu() {
-    setSecilenler((prev) =>
-      liste.length > 0 && prev.size === liste.length ? new Set() : new Set(liste.map((d) => d.id))
-    );
+    setSecilenler((prev) => {
+      const next = new Set(prev);
+      if (gorunenTumuSecili) gorunenListe.forEach((d) => next.delete(d.id));
+      else gorunenListe.forEach((d) => next.add(d.id));
+      return next;
+    });
   }
 
+  // Excel yalnız seçili kayıtlar için iner; seçim yokken düğme gösterilmez
+  // (yanlışlıkla tüm tablonun inmemesi için).
   async function handleExcelIndir() {
+    if (secilenler.size === 0) return;
     setExcelIndiriliyor(true);
     try {
-      if (secilenler.size > 0) {
-        const seciliKayitlar = liste.filter((d) => secilenler.has(d.id));
-        const { secilenleriAyriAyriIndir } = await import("@/lib/raporIndir");
-        setExcelIlerleme({ tamamlanan: 0, toplam: seciliKayitlar.length });
-        await secilenleriAyriAyriIndir(seciliKayitlar, (tamamlanan, toplam) =>
-          setExcelIlerleme({ tamamlanan, toplam })
-        );
-      } else {
-        if (liste.length === 0) return;
-        const { degerlendirmeListesiExcelIndir } = await import("@/lib/excelExport");
-        await degerlendirmeListesiExcelIndir(liste);
-      }
+      const seciliKayitlar = liste.filter((d) => secilenler.has(d.id));
+      const { secilenleriAyriAyriIndir } = await import("@/lib/raporIndir");
+      setExcelIlerleme({ tamamlanan: 0, toplam: seciliKayitlar.length });
+      await secilenleriAyriAyriIndir(seciliKayitlar, (tamamlanan, toplam) =>
+        setExcelIlerleme({ tamamlanan, toplam })
+      );
     } finally {
       setExcelIndiriliyor(false);
       setExcelIlerleme(null);
@@ -458,8 +464,9 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       header: (
         <input
           type="checkbox"
-          title="Listedeki tüm kayıtları seç"
-          checked={liste.length > 0 && secilenler.size === liste.length}
+          title="Filtrelenmiş listedeki tüm kayıtları seç"
+          checked={gorunenTumuSecili}
+          disabled={gorunenListe.length === 0}
           onChange={toggleTumu}
           className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
         />
@@ -669,18 +676,18 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
               {secilenler.size} seçili <X size={12} />
             </button>
           )}
-          <button
-            onClick={handleExcelIndir}
-            disabled={liste.length === 0 || excelIndiriliyor}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
-          >
-            <FileSpreadsheet size={15} />
-            {excelIlerleme
-              ? `İndiriliyor... (${excelIlerleme.tamamlanan}/${excelIlerleme.toplam})`
-              : secilenler.size > 0
-              ? `Seçilenlerin Raporunu İndir (${secilenler.size} dosya)`
-              : `Excel İndir (${liste.length})`}
-          </button>
+          {secilenler.size > 0 && (
+            <button
+              onClick={handleExcelIndir}
+              disabled={excelIndiriliyor}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-60"
+            >
+              <FileSpreadsheet size={15} />
+              {excelIlerleme
+                ? `İndiriliyor... (${excelIlerleme.tamamlanan}/${excelIlerleme.toplam})`
+                : `Seçilenlerin Raporunu İndir (${secilenler.size} dosya)`}
+            </button>
+          )}
         </div>
       </div>
       {secilenler.size > 1 && (
@@ -701,6 +708,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
         emptyDescription="Eski kayıtlar için Rapor Oluşturma Tarihi sütunundaki tarih aralığı filtresini kullanın."
         defaultPageSize={25}
         onDateFilterChange={handleTarihFiltresi}
+        onVisibleRowsChange={setGorunenListe}
       />
 
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
