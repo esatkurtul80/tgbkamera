@@ -169,6 +169,36 @@ function YeniDegerlendirmeIcerik() {
   const [hoverCol,     setHoverCol]   = useState<string | null>(null);
   // Birden fazla saat eklenmiş günler: kapalıysa tek sütuna daraltılıp özet gösterilir.
   const [kapaliGunler, setKapaliGunler] = useState<Set<number>>(new Set());
+  // Soru sütunu genişliği — sağ kenarından sürüklenerek ayarlanır, tarayıcıda hatırlanır.
+  const SORU_GENISLIK_KEY = "tgb.matris.soruGenislik";
+  const SORU_GENISLIK_MIN = 160, SORU_GENISLIK_MAX = 640;
+  const [soruGenislik, setSoruGenislik] = useState(300);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(SORU_GENISLIK_KEY));
+      if (v >= SORU_GENISLIK_MIN && v <= SORU_GENISLIK_MAX) setSoruGenislik(v);
+    } catch { /* localStorage erişilemezse varsayılan kalır */ }
+  }, []);
+  const soruSutunuSurukle = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const baslangicX = e.clientX, baslangicW = soruGenislik;
+    let son = baslangicW;
+    const move = (ev: MouseEvent) => {
+      son = Math.min(SORU_GENISLIK_MAX, Math.max(SORU_GENISLIK_MIN, baslangicW + (ev.clientX - baslangicX)));
+      setSoruGenislik(son);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem(SORU_GENISLIK_KEY, String(son)); } catch { /* yoksay */ }
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   const gunAcKapa = (gun: number) =>
     setKapaliGunler(prev => {
       const next = new Set(prev);
@@ -765,9 +795,17 @@ function YeniDegerlendirmeIcerik() {
             {/* Satır 1 — kimlik + gün başlıkları */}
             <tr>
               <th rowSpan={2}
-                className="sticky left-0 z-40 bg-slate-50 border-b border-r border-slate-200 p-4 text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] align-bottom"
-                style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
+                className="sticky left-0 z-40 bg-slate-50 border-b border-r border-slate-200 p-4 text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] align-bottom relative"
+                style={{ width: soruGenislik, minWidth: soruGenislik, maxWidth: soruGenislik }}>
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Denetim Soruları</span>
+                {/* Sütun genişliği tutamacı — sağ kenardan tutup sürükle */}
+                <div
+                  onMouseDown={soruSutunuSurukle}
+                  onDoubleClick={() => { setSoruGenislik(300); try { localStorage.removeItem(SORU_GENISLIK_KEY); } catch { /* yoksay */ } }}
+                  className="absolute top-0 right-0 h-full w-2 cursor-col-resize group/resize flex items-center justify-center"
+                  title="Sütun genişliğini ayarlamak için sürükle (çift tık: sıfırla)">
+                  <div className="w-[3px] h-8 rounded-full bg-slate-300 group-hover/resize:bg-blue-500 transition-colors" />
+                </div>
               </th>
 
               {ayinGunleri.map(gun => {
@@ -899,7 +937,7 @@ function YeniDegerlendirmeIcerik() {
 
                       {/* Soru sütunu sticky */}
                       <td className="sticky left-0 z-10 px-3 py-1 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] bg-white align-middle"
-                        style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
+                        style={{ width: soruGenislik, minWidth: soruGenislik, maxWidth: soruGenislik }}>
                         <div className="flex gap-2.5">
                           <span className="text-slate-300 font-bold text-xs min-w-[16px] leading-tight">{qIdx + 1}</span>
                           <p className="text-[9px] font-medium text-slate-700 leading-tight">{soru.metin}</p>
