@@ -902,7 +902,7 @@ function YeniDegerlendirmeIcerik() {
                         style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
                         <div className="flex gap-2.5">
                           <span className="text-slate-300 font-bold text-xs min-w-[16px] leading-tight">{qIdx + 1}</span>
-                          <p className="text-xs font-medium text-slate-700 leading-tight">{soru.metin}</p>
+                          <p className="text-[11px] font-medium text-slate-700 leading-tight">{soru.metin}</p>
                         </div>
                       </td>
 
