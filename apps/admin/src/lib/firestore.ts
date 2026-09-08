@@ -737,6 +737,48 @@ export async function updateDegerlendirmeIzlenmeler(
   });
 }
 
+// ─── Hücre Düzenleme Geçmişi (puanlı rapor matrisi) ─────────────────────────
+// degerlendirmeler/{id}/hucreGecmisi — her E/H/M değişikliği için bir kayıt.
+// Rapor belgesinin içinde tutulmaz: liste sorguları raporları tam indirdiği için
+// belge şişmesin, otomatik kayıt yükü artmasın.
+
+export interface HucreGecmisKaydi {
+  id: string;
+  izId: string;
+  soruId: string;
+  /** null → hücre temizlendi */
+  cevap: import("@/types").CevapSecenegi | null;
+  kullaniciId: string;
+  kullaniciAd: string;
+  zaman: Timestamp;
+  /** İşaretlenen sütunun (izlenme anının) tarihi — kolon silinse de kayıt anlaşılır kalsın */
+  izTarih?: Timestamp;
+}
+
+export async function addHucreGecmisi(
+  degId: string,
+  kayit: Omit<HucreGecmisKaydi, "id" | "zaman">
+): Promise<void> {
+  await addDoc(collection(db, "degerlendirmeler", degId, "hucreGecmisi"), {
+    ...cleanData(kayit),
+    zaman: serverTimestamp(),
+  });
+}
+
+/** Bir hücrenin (sütun + soru) geçmişi, en yeni önce. */
+export async function getHucreGecmisi(degId: string, izId: string, soruId: string): Promise<HucreGecmisKaydi[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, "degerlendirmeler", degId, "hucreGecmisi"),
+      where("izId", "==", izId),
+      where("soruId", "==", soruId)
+    )
+  );
+  return snap.docs
+    .map((d) => toDoc<HucreGecmisKaydi>(d))
+    .sort((a, b) => (b.zaman?.toMillis?.() ?? 0) - (a.zaman?.toMillis?.() ?? 0));
+}
+
 // ─── Rapor Tasarımı Ayarları ────────────────────────────────────────────────
 
 /** Kayıtlı rapor tasarım ayarlarını döner (hiç kaydedilmemişse null). */

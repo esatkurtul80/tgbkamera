@@ -3,13 +3,15 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff, StickyNote, Copy, ClipboardPaste, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Plus, X, Trash2, Check, ChevronRight, Calendar, User, Store, FileText, Clock, Layers, WifiOff, StickyNote, Copy, ClipboardPaste, ChevronsLeft, ChevronsRight, History } from "lucide-react";
 import {
   getFormlar, getAktifPersoneller, getMagazalar,
   getForm, getBolum, getSoru, createDegerlendirme,
   getDegerlendirme, getAcikDegerlendirmeler, getAylikDegerlendirmeler,
   updateDegerlendirmeIzlenmeler, setDegerlendirmeDurum,
+  addHucreGecmisi, getHucreGecmisi,
 } from "@/lib/firestore";
+import type { HucreGecmisKaydi } from "@/lib/firestore";
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from "@/lib/skorlama";
 import PuansizDegerlendirmeFormu from "@/components/degerlendirme/PuansizDegerlendirmeFormu";
 import { useAuth } from "@/contexts/AuthContext";
@@ -209,6 +211,10 @@ function YeniDegerlendirmeIcerik() {
   const [ctxMenu,      setCtxMenu]    = useState<{ x: number; y: number; izId: string; soruId: string } | null>(null);
   const [notDuzenle,   setNotDuzenle] = useState<{ izId: string; soruId: string; taslak: string } | null>(null);
   const [hucrePano,    setHucrePano]  = useState<{ cevap: CevapSecenegi | undefined; not?: string } | null>(null);
+  // Hücre düzenleme geçmişi (yalnız admin görür; kayıt herkes için tutulur)
+  const [gecmisModal,  setGecmisModal]  = useState<{ izId: string; soruId: string } | null>(null);
+  const [gecmisKayitlar, setGecmisKayitlar] = useState<HucreGecmisKaydi[]>([]);
+  const [gecmisDurum,  setGecmisDurum]  = useState<"yukleniyor" | "hazir" | "hata">("hazir");
   const [senkronBekliyor, setSenkronBekliyor] = useState(false);
 
   // Firestore'daki açık rapor ID'si (kameraman akışında set edilir)
@@ -222,6 +228,9 @@ function YeniDegerlendirmeIcerik() {
   const [devamToplamPuan, setDevamToplamPuan] = useState<number | null | undefined>(undefined);
   // Otomatik kayıt debounce timer ref
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // setCevap içinde önceki cevabı okumak için güncel izlenmeler (geçmiş kaydı karşılaştırması)
+  const izlenmelerRef = useRef<IzlenmeLocal[]>([]);
+  useEffect(() => { izlenmelerRef.current = izlenmeler; }, [izlenmeler]);
   // Aynı parametrelerle (React Strict Mode'un effect'i iki kez çalıştırması,
   // hızlı art arda tıklama vb.) birden fazla açık rapor oluşturulmasını engeller.
   const olusturulanAnahtarRef = useRef<string | null>(null);
@@ -522,13 +531,25 @@ function YeniDegerlendirmeIcerik() {
     const t = new Date(seciliYil, seciliAy, gun, 0, 0);
     setIzlenmeler(p => [...p, {
       id: crypto.randomUUID(), tarih: t, cevaplar: {},
-      kaydedenId: user?.uid, kaydedenAd: kullanici?.displayName ?? user?.displayName ?? "",
+      kaydedenId: user?.uid, kaydedenAd: kullanici?.displayName || user?.displayName || kullanici?.email || user?.email || "",
     }]);
   }
   function izlenmeSil(id: string) { setIzlenmeler(p => p.filter(i => i.id !== id)); }
   const setCevap = useCallback((izId: string, soruId: string, cevap: CevapSecenegi | undefined) => {
+    // Geçmiş kaydı: yalnız cevap gerçekten değişiyorsa ve rapor belgesi oluşmuşsa.
+    // Kayıt hatası (ör. kural izni yoksa) işaretlemeyi engellemez.
+    const onceki = izlenmelerRef.current.find(i => i.id === izId);
+    if (onceki && (onceki.cevaplar[soruId] ?? undefined) !== cevap && degId && user) {
+      addHucreGecmisi(degId, {
+        izId, soruId,
+        cevap: cevap ?? null,
+        kullaniciId: user.uid,
+        kullaniciAd: kullanici?.displayName || user.displayName || kullanici?.email || user.email || "",
+        izTarih: Timestamp.fromDate(onceki.tarih),
+      }).catch(err => console.warn("Hücre geçmişi yazılamadı:", err));
+    }
     setIzlenmeler(p => p.map(i => i.id !== izId ? i : { ...i, cevaplar: { ...i.cevaplar, [soruId]: cevap } }));
-  }, []);
+  }, [degId, user, kullanici]);
   const setNot = useCallback((izId: string, soruId: string, not: string | undefined) => {
     setIzlenmeler(p => p.map(i => {
       if (i.id !== izId) return i;
@@ -816,7 +837,7 @@ function YeniDegerlendirmeIcerik() {
                 return (
                   <th key={gun} colSpan={span}
                     className="border-b border-slate-200 p-0 text-center"
-                    style={{ minWidth: span * 85 }}>
+                    style={{ minWidth: span * 70 }}>
                     <div className={`relative py-2 flex flex-col items-center justify-center border-l ${kapali ? "border-blue-200 bg-blue-100" : "border-slate-200/50 bg-slate-50/50"}`}>
                       <span className="text-[11px] font-bold text-slate-700">{String(gun).padStart(2,"0")}</span>
                       <span className="text-[9px] text-slate-400 font-medium uppercase">{GUN_TR[d.getDay()]}</span>
@@ -854,7 +875,7 @@ function YeniDegerlendirmeIcerik() {
                   return [
                     <th key={`kapali-${gun}`}
                       className="bg-blue-100 py-2 border-t border-l border-blue-200 px-1 transition-colors"
-                      style={{ width: 85, minWidth: 85, borderBottom: "1px solid #e2e8f0" }}>
+                      style={{ width: 70, minWidth: 70, borderBottom: "1px solid #e2e8f0" }}>
                       <button onClick={() => gunAcKapa(gun)}
                         className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
                         title="Saatleri aç">
@@ -868,7 +889,7 @@ function YeniDegerlendirmeIcerik() {
                   return [
                     <th key={`empty-${gun}`}
                       className="bg-slate-100/50 py-2 border-t border-l border-slate-200/50 px-2 transition-colors"
-                      style={{ width: 85, minWidth: 85, borderBottom: "1px solid #e2e8f0" }}>
+                      style={{ width: 70, minWidth: 70, borderBottom: "1px solid #e2e8f0" }}>
                       <div className="flex items-center justify-center w-full">
                         <button onClick={() => izlenmeEkle(gun)} 
                           className="text-blue-500 hover:text-blue-700 transition-colors"
@@ -884,9 +905,9 @@ function YeniDegerlendirmeIcerik() {
                   <th key={iz.id}
                     onMouseEnter={() => setHoverCol(iz.id)}
                     onMouseLeave={() => setHoverCol(null)}
-                    className="bg-slate-100/50 py-2 border-t border-l border-slate-200/50 px-1 transition-colors"
-                    style={{ width: 85, minWidth: 85, borderBottom: "1px solid #e2e8f0" }}>
-                    <div className="flex items-center justify-center gap-1.5 w-full">
+                    className="bg-slate-100/50 py-2 border-t border-l border-slate-200/50 px-0.5 transition-colors"
+                    style={{ width: 70, minWidth: 70, borderBottom: "1px solid #e2e8f0" }}>
+                    <div className="flex items-center justify-center gap-1 w-full">
                       <SaatInput izId={iz.id} tarih={iz.tarih} onCommit={setSaat} />
                       <button onClick={() => setOnaylaId(iz.id)} 
                         className="text-rose-500 hover:text-rose-700 transition-colors shrink-0"
@@ -901,7 +922,15 @@ function YeniDegerlendirmeIcerik() {
                     </div>
                     {iz.kaydedenAd && (
                       <div className="mt-1 text-center" title={`Bu günü işaretleyen: ${iz.kaydedenAd}`}>
-                        <span className="text-[9px] font-medium text-slate-400 truncate block px-1">{iz.kaydedenAd}</span>
+                        {(() => {
+                          // Dar sütunda tek satır: ad + soyadın baş harfi ("Esat K.").
+                          const parca = iz.kaydedenAd.trim().split(/\s+/);
+                          const soyad = parca.length > 1 ? parca.pop() ?? "" : "";
+                          const kisa = soyad ? `${parca.join(" ")} ${soyad.charAt(0).toLocaleUpperCase("tr-TR")}.` : parca.join(" ");
+                          return (
+                            <span className="text-[9px] font-medium text-slate-400 block px-0.5 leading-tight truncate">{kisa}</span>
+                          );
+                        })()}
                       </div>
                     )}
                   </th>
@@ -952,7 +981,7 @@ function YeniDegerlendirmeIcerik() {
                           return [
                             <td key={`empty-${gun}`}
                               className={`border-l border-b border-slate-100 p-1 align-middle bg-white group-hover:bg-slate-50 transition-colors`}
-                              style={{ width: 85, minWidth: 85, height: 32 }} />
+                              style={{ width: 70, minWidth: 70, height: 32 }} />
                           ];
                         }
 
@@ -967,7 +996,7 @@ function YeniDegerlendirmeIcerik() {
                             <td key={`kapali-${gun}`}
                               onClick={() => gunAcKapa(gun)}
                               className="border-l border-b border-blue-200/70 p-1 align-middle bg-blue-100/70 group-hover:bg-blue-200/70 transition-colors cursor-pointer"
-                              style={{ width: 85, minWidth: 85, height: 32 }}
+                              style={{ width: 70, minWidth: 70, height: 32 }}
                               title="Saatleri açmak için tıklayın">
                               {e + h + m > 0 ? (
                                 <div className="flex items-center justify-center gap-[2px]">
@@ -991,7 +1020,7 @@ function YeniDegerlendirmeIcerik() {
                               setCtxMenu({ x: e.clientX, y: e.clientY, izId: iz.id, soruId: soru.id });
                             }}
                             className={`border-l border-b border-slate-100 p-1 align-middle transition-colors bg-white group-hover:bg-slate-50 ${hoverCol === iz.id ? "bg-slate-50" : ""}`}
-                            style={{ width: 85, minWidth: 85, height: 32 }}>
+                            style={{ width: 70, minWidth: 70, height: 32 }}>
                             <CevapCell
                               cevap={iz.cevaplar[soru.id]}
                               not={iz.notlar?.[soru.id]}
@@ -1128,8 +1157,102 @@ function YeniDegerlendirmeIcerik() {
                 }}>
                 <Trash2 size={14} className="shrink-0" /> Sil
               </button>
+              {kullanici?.rol === "admin" && (
+                <>
+                  <div className="my-1 h-px bg-slate-100" />
+                  <button className={itemCls}
+                    onClick={() => {
+                      const hedef = { izId: ctxMenu.izId, soruId: ctxMenu.soruId };
+                      kapat();
+                      if (!degId) return;
+                      setGecmisModal(hedef);
+                      setGecmisKayitlar([]);
+                      setGecmisDurum("yukleniyor");
+                      getHucreGecmisi(degId, hedef.izId, hedef.soruId)
+                        .then(k => { setGecmisKayitlar(k); setGecmisDurum("hazir"); })
+                        .catch(err => { console.error("Hücre geçmişi okunamadı:", err); setGecmisDurum("hata"); });
+                    }}>
+                    <History size={14} className="text-indigo-500 shrink-0" /> Düzenleme Geçmişi
+                  </button>
+                </>
+              )}
             </div>
           </>
+        );
+      })()}
+
+      {/* ── Hücre Düzenleme Geçmişi Modalı (yalnız admin) ─────────────────── */}
+      {gecmisModal && (() => {
+        const iz = izlenmeler.find(i => i.id === gecmisModal.izId);
+        const CEVAP_ETIKET: Record<string, { ad: string; cls: string }> = {
+          evet:  { ad: "Evet",  cls: "bg-emerald-500 text-white" },
+          hayir: { ad: "Hayır", cls: "bg-rose-500 text-white" },
+          muaf:  { ad: "Muaf",  cls: "bg-slate-400 text-white" },
+          bos:   { ad: "Temizlendi", cls: "bg-slate-100 text-slate-500 border border-slate-200" },
+        };
+        const fmt = (t?: Timestamp) => {
+          const d = t?.toDate?.();
+          return d
+            ? d.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : "Senkron bekliyor";
+        };
+        const kapat = () => setGecmisModal(null);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={kapat}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-slate-100">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <History size={15} className="text-indigo-500" /> Düzenleme Geçmişi
+                  </h3>
+                  <button onClick={kapat} className="text-slate-400 hover:text-slate-700 transition-colors"><X size={16} /></button>
+                </div>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto">
+                {gecmisDurum === "yukleniyor" && (
+                  <div className="py-10 text-center text-xs text-slate-400">Yükleniyor...</div>
+                )}
+                {gecmisDurum === "hata" && (
+                  <div className="py-10 px-5 text-center text-xs text-rose-600">
+                    Geçmiş okunamadı. Firestore kurallarında <code className="font-mono">degerlendirmeler/{"{id}"}/hucreGecmisi</code> için okuma izni gerekiyor olabilir.
+                  </div>
+                )}
+                {gecmisDurum === "hazir" && gecmisKayitlar.length === 0 && (
+                  <div className="py-8 px-5 text-center text-xs text-slate-400 space-y-2">
+                    <p>Bu hücre için kayıtlı düzenleme yok.</p>
+                    {iz?.kaydedenAd && (
+                      <p className="text-slate-600">
+                        Bu sütunu işaretleyen: <span className="font-semibold text-slate-800">{iz.kaydedenAd}</span>
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400">
+                      Hücre bazlı geçmiş bu özellik açıldıktan sonraki işaretlemeler için tutulur. Daha eski işaretlemelerde yalnız sütunu işaretleyen kişi bilinir.
+                    </p>
+                  </div>
+                )}
+                {gecmisDurum === "hazir" && gecmisKayitlar.length > 0 && (
+                  <ul className="divide-y divide-slate-100">
+                    {gecmisKayitlar.map((k, idx) => {
+                      const et = CEVAP_ETIKET[k.cevap ?? "bos"];
+                      return (
+                        <li key={k.id} className="px-5 py-3 flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold text-indigo-600">{(k.kullaniciAd || "?").charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-slate-800 truncate">{k.kullaniciAd || k.kullaniciId}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">{fmt(k.zaman)}</p>
+                          </div>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold ${et.cls}`}>{et.ad}</span>
+                          {idx === 0 && <span className="shrink-0 text-[9px] font-bold text-indigo-500 uppercase">Güncel</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
         );
       })()}
 
