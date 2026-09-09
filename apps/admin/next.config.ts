@@ -6,6 +6,18 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
+  // signInWithPopup: Google giriş penceresinin kendini kapatabilmesi için
+  // (aksi halde "Cross-Origin-Opener-Policy policy would block the window.close call" uyarısı).
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

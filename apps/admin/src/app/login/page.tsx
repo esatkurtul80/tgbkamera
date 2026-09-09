@@ -16,7 +16,11 @@ export default function LoginPage() {
       await signInWithGoogle();
     } catch (err: any) {
       console.error(err);
-      if (err?.code !== "auth/popup-closed-by-user") {
+      if (err?.code === "auth/popup-closed-by-user" || err?.code === "auth/cancelled-popup-request") {
+        // Kullanıcı pencereyi kapattı; hata gösterme.
+      } else if (err?.code === "auth/invalid-credential") {
+        setError("Google oturumu doğrulanamadı. Lütfen tekrar deneyin; sorun sürerse bilgisayar saatinin doğru olduğundan emin olun.");
+      } else {
         setError("Google ile giriş yapılırken bir hata oluştu. Lütfen tekrar deneyin.");
       }
     } finally {
