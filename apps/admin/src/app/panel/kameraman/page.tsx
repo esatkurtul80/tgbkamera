@@ -269,7 +269,8 @@ export default function KameramanPaneliPage() {
   }, [buAyTumRaporlar]);
 
   // Personel → mağaza bazında bu ayki izleme/puansız rapor özeti (kim raporladıysa fark etmez).
-  // İzleme sayısı: puanlı raporlarda en çok işaretlenen (evet/hayır/muaf) sorunun işaret adedi.
+  // İzleme sayısı: puanlı raporlarda en çok işaretlenen (evet/hayır) sorunun işaret adedi.
+  // Muaf ve boş hücreler gözlem sayılmaz.
   // Puansız raporlar ise adet olarak sayılır. Mağaza raporları (personelsiz) hariç tutulur.
   const personelIzlemeOzeti = useMemo(() => {
     const soruSayac: Record<string, Record<string, Record<string, number>>> = {};
@@ -290,7 +291,7 @@ export default function KameramanPaneliPage() {
         d.izlenmeler && d.izlenmeler.length > 0 ? d.izlenmeler.map((iz) => iz.cevaplar ?? {}) : [d.cevaplar ?? {}];
       for (const cevaplar of cevapSetleri) {
         for (const [soruId, cevap] of Object.entries(cevaplar)) {
-          if (cevap !== "evet" && cevap !== "hayir" && cevap !== "muaf") continue;
+          if (cevap !== "evet" && cevap !== "hayir") continue;
           sayac[soruId] = (sayac[soruId] ?? 0) + 1;
           if (sayac[soruId] > entry.izleme) entry.izleme = sayac[soruId];
         }

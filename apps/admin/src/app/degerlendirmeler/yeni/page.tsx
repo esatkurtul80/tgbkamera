@@ -527,8 +527,9 @@ function YeniDegerlendirmeIcerik() {
     return map;
   }, [izlenmeler, seciliAy, seciliYil, gunSayisi]);
 
-  // Gün → gözlem sayısı: o günün saat sütunlarında en çok işaretlenen (E/H/M)
+  // Gün → gözlem sayısı: o günün saat sütunlarında en çok işaretlenen (E/H)
   // sorunun işaret adedi. Açılan sütun sayısı değil, fiilen yapılan gözlem sayısıdır.
+  // Muaf ve boş hücreler gözlem sayılmaz.
   const gunGozlemMap = useMemo(() => {
     const map = new Map<number, number>();
     for (const [gun, obs] of gunlukMap) {
@@ -536,7 +537,7 @@ function YeniDegerlendirmeIcerik() {
       let max = 0;
       for (const iz of obs) {
         for (const [soruId, c] of Object.entries(iz.cevaplar)) {
-          if (c !== "evet" && c !== "hayir" && c !== "muaf") continue;
+          if (c !== "evet" && c !== "hayir") continue;
           sayac[soruId] = (sayac[soruId] ?? 0) + 1;
           if (sayac[soruId] > max) max = sayac[soruId];
         }
