@@ -32,6 +32,10 @@ const BM_DENY_PREFIXES = [
   "/tum-degerlendirmeler", "/rapor-tasarimi", "/degerlendirmeler/yeni",
 ];
 
+// Puan Paneli ve tekrar izleme havuzu: mağazalar arası personel puanlarını gösterir ve
+// kameraman iş akışıdır — bölge müdürü ile mağaza sorumlusuna kapalı.
+const PUAN_PANELI_PREFIXES = ["/puan-paneli", "/tekrar-izlemeler", "/zayif-personel-raporlari"];
+
 function bmYasakMi(pathname: string): boolean {
   return (
     BM_DENY_PREFIXES.some((p) => pathname.startsWith(p)) ||
@@ -78,6 +82,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     // Bölge müdürü salt okunur alan dışına çıkamaz
     if (rol === "bolge_muduru" && bmYasakMi(pathname)) {
+      router.replace(ROLE_HOMES[rol]);
+      return;
+    }
+
+    // Puan Paneli / Tekrar İzlemeler: bölge müdürü ve mağaza sorumlusuna kapalı
+    if (
+      (rol === "bolge_muduru" || rol === "magaza_sorumlusu") &&
+      PUAN_PANELI_PREFIXES.some((p) => pathname.startsWith(p))
+    ) {
       router.replace(ROLE_HOMES[rol]);
       return;
     }

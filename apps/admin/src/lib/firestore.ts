@@ -7,6 +7,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   writeBatch,
   query,
   where,
@@ -15,6 +16,7 @@ import {
   serverTimestamp,
   DocumentData,
   QueryDocumentSnapshot,
+  QueryConstraint,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -36,6 +38,7 @@ import type {
   SkorlamaSistemi,
   SoruTipi,
   SoruKategori,
+  TekrarIzleme,
 } from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -351,6 +354,7 @@ export async function createForm(data: {
   puanGirisTipi?: "otomatik" | "manuel";
   skorlamaSistemi?: SkorlamaSistemi;
   magazaFormu?: boolean;
+  zayifPersonelFormu?: boolean;
   bolumIdleri: string[];
 }): Promise<string> {
   await bolumIdleriniDogrula(data.bolumIdleri, data.puanli, data.puanGirisTipi);
@@ -372,6 +376,7 @@ export async function updateForm(
     puanGirisTipi?: "otomatik" | "manuel";
     skorlamaSistemi?: SkorlamaSistemi;
     magazaFormu?: boolean;
+    zayifPersonelFormu?: boolean;
     bolumIdleri: string[];
   }
 ): Promise<void> {
@@ -479,20 +484,21 @@ export async function getDegerlendirmeler(filters?: {
 /**
  * Oluşturma tarihine göre aralık sorgusu — liste sayfalarının varsayılan
  * "bu ay" görünümü. Tek alan üzerinde aralık + aynı alanda sıralama olduğundan
- * kompozit indeks gerektirmez.
+ * kompozit indeks gerektirmez. `kameramanId` verilirse yalnız o kameramanın
+ * raporları gelir (mevcut kameramanId+olusturmaTarihi indeksini kullanır).
  */
 export async function getDegerlendirmelerByOlusturmaAraligi(
   baslangic: Date,
-  bitis: Date
+  bitis: Date,
+  kameramanId?: string
 ): Promise<Degerlendirme[]> {
-  const snap = await getDocs(
-    query(
-      collection(db, "degerlendirmeler"),
-      where("olusturmaTarihi", ">=", Timestamp.fromDate(baslangic)),
-      where("olusturmaTarihi", "<=", Timestamp.fromDate(bitis)),
-      orderBy("olusturmaTarihi", "desc")
-    )
-  );
+  const kisitlar: QueryConstraint[] = [
+    where("olusturmaTarihi", ">=", Timestamp.fromDate(baslangic)),
+    where("olusturmaTarihi", "<=", Timestamp.fromDate(bitis)),
+    orderBy("olusturmaTarihi", "desc"),
+  ];
+  if (kameramanId) kisitlar.unshift(where("kameramanId", "==", kameramanId));
+  const snap = await getDocs(query(collection(db, "degerlendirmeler"), ...kisitlar));
   return snap.docs.map((d) => toDoc<Degerlendirme>(d));
 }
 
@@ -545,6 +551,15 @@ export async function getDegerlendirmelerByAyYil(ay: number, yil: number): Promi
 export async function getDegerlendirme(id: string): Promise<Degerlendirme | null> {
   const snap = await getDoc(doc(db, "degerlendirmeler", id));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Degerlendirme) : null;
+}
+
+/** Verilen id'lerdeki raporlar (bulunamayanlar atlanır) — farklı ayda yapılmış
+ *  takip raporlarını Puan Paneli'nde çözmek için. */
+export async function getDegerlendirmelerByIds(ids: string[]): Promise<Degerlendirme[]> {
+  const tekil = [...new Set(ids.filter(Boolean))];
+  if (tekil.length === 0) return [];
+  const sonuclar = await Promise.all(tekil.map((id) => getDegerlendirme(id).catch(() => null)));
+  return sonuclar.filter((d): d is Degerlendirme => d !== null);
 }
 
 /** Raporun ait olduğu ay (0-11) ve yıl — `ay/yil` alanı yoksa oluşturma tarihinden. */
@@ -648,6 +663,16 @@ export async function restoreDegerlendirmeFromCopKutusu(id: string): Promise<voi
   batch.set(doc(db, "degerlendirmeler", id), degData);
   batch.delete(doc(db, "cop_kutusu", id));
   await batch.commit();
+
+  // Takip raporuysa ve bağlı tekrar izleme kaydı da çöpe atılmışsa onu da geri getir
+  // (kayıt ve rapor birlikte çöpe gider, birlikte döner).
+  const takipId = typeof degData.takipId === "string" ? degData.takipId : null;
+  if (takipId) {
+    const takipSnap = await getDoc(doc(db, "tekrarIzlemeler", takipId)).catch(() => null);
+    if (takipSnap?.exists() && takipSnap.data().durum === "silindi") {
+      await updateDoc(doc(db, "tekrarIzlemeler", takipId), tekrarIzlemeGeriGetirmeAlanlari()).catch(console.error);
+    }
+  }
 }
 
 export async function updateDegerlendirme(
@@ -803,6 +828,127 @@ export async function saveRaporTasarim(ayarlar: RaporTasarimAyarlari): Promise<v
     fontlar: ayarlar.fontlar,
     boyutlar: ayarlar.boyutlar,
     harfAraliklar: ayarlar.harfAraliklar,
+    guncellemeTarihi: serverTimestamp(),
+  });
+}
+
+// ─── Tekrar İzlemeler (zayıf personel takip havuzu) ─────────────────────────
+// Sorgular eşitlik ya da tek alan aralık + aynı alanda sıralama kullanır; kompozit
+// indeks gerektirmez. Durum + sıralama birlikte sorgulanırsa indeks eklenmelidir.
+
+function tekrarIzlemeSirala(a: TekrarIzleme, b: TekrarIzleme): number {
+  return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
+}
+
+/** Verilen dönemin (zayıf puanın ait olduğu ay/yıl) tüm işaretleri — en yeni önce. */
+export async function getTekrarIzlemelerByAyYil(ay: number, yil: number): Promise<TekrarIzleme[]> {
+  const snap = await getDocs(
+    query(collection(db, "tekrarIzlemeler"), where("ay", "==", ay), where("yil", "==", yil))
+  );
+  return snap.docs.map((d) => toDoc<TekrarIzleme>(d)).sort(tekrarIzlemeSirala);
+}
+
+/** Çöpe atılmamış (bekliyor + tamamlandi) tüm işaretler, tüm dönemler — en yeni önce.
+ *  İzlenecekler sayfası dönemi tablodaki Dönem sütunu filtresiyle seçer; koleksiyon ayda
+ *  birkaç kayıt büyüdüğü için tek seferde çekmek sorun değildir. */
+export async function getAktifTekrarIzlemeler(): Promise<TekrarIzleme[]> {
+  const snap = await getDocs(
+    query(collection(db, "tekrarIzlemeler"), where("durum", "in", ["bekliyor", "tamamlandi"]))
+  );
+  return snap.docs.map((d) => toDoc<TekrarIzleme>(d)).sort(tekrarIzlemeSirala);
+}
+
+/** Havuzdaki bekleyen işaretler — en yeni önce. */
+export async function getBekleyenTekrarIzlemeler(): Promise<TekrarIzleme[]> {
+  const snap = await getDocs(
+    query(collection(db, "tekrarIzlemeler"), where("durum", "==", "bekliyor"))
+  );
+  return snap.docs.map((d) => toDoc<TekrarIzleme>(d)).sort(tekrarIzlemeSirala);
+}
+
+/** Çöpten geri getirilen kaydın alanları — restoreDegerlendirmeFromCopKutusu çağırır. */
+function tekrarIzlemeGeriGetirmeAlanlari() {
+  return {
+    durum: "tamamlandi",
+    silinmeTarihi: deleteField(),
+    silenKullaniciId: deleteField(),
+    silenKullaniciAd: deleteField(),
+    otomatikSilinmeTarihi: deleteField(),
+    guncellemeTarihi: serverTimestamp(),
+  };
+}
+
+/**
+ * Tamamlanmış bir tekrar izleme kaydını çöpe atar: bağlı takip raporu (varsa) ortak
+ * cop_kutusu'na taşınır, kayıt `silindi` durumuna geçer. Geri getirme yalnız Çöp Kutusu
+ * sayfasından, rapor üzerinden yapılır (restoreDegerlendirmeFromCopKutusu kaydı da döndürür).
+ * `otomatikSilinmeTarihi` için konsolda TTL politikası tanımlanırsa kayıt kalıcı silinir.
+ */
+export async function copeAtTekrarIzleme(
+  takip: TekrarIzleme,
+  silen: { id: string; ad: string }
+): Promise<void> {
+  if (takip.takipDegerlendirmeId) {
+    const rapor = await getDegerlendirme(takip.takipDegerlendirmeId);
+    if (rapor) await softDeleteDegerlendirme(rapor, silen);
+  }
+  const simdi = Timestamp.now();
+  await updateDoc(doc(db, "tekrarIzlemeler", takip.id), {
+    durum: "silindi",
+    silinmeTarihi: simdi,
+    silenKullaniciId: silen.id,
+    silenKullaniciAd: silen.ad,
+    otomatikSilinmeTarihi: Timestamp.fromMillis(simdi.toMillis() + COP_KUTUSU_SAKLAMA_GUN * 24 * 60 * 60 * 1000),
+    guncellemeTarihi: serverTimestamp(),
+  });
+}
+
+export async function getTekrarIzleme(id: string): Promise<TekrarIzleme | null> {
+  const snap = await getDoc(doc(db, "tekrarIzlemeler", id));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as TekrarIzleme) : null;
+}
+
+export type YeniTekrarIzleme = Omit<TekrarIzleme, "id" | "durum" | "olusturmaTarihi" | "guncellemeTarihi">;
+
+/** Birden fazla personeli tek seferde "tekrar izlenecek" olarak işaretler. Dönen liste yeni id'lerdir. */
+export async function createTekrarIzlemeler(kayitlar: YeniTekrarIzleme[]): Promise<string[]> {
+  if (kayitlar.length === 0) return [];
+  const batch = writeBatch(db);
+  const idler: string[] = [];
+  for (const k of kayitlar) {
+    const id = generateCustomId(k.personelAd || "TAKIP");
+    idler.push(id);
+    batch.set(doc(db, "tekrarIzlemeler", id), {
+      ...cleanData(k),
+      durum: "bekliyor",
+      olusturmaTarihi: serverTimestamp(),
+      guncellemeTarihi: serverTimestamp(),
+    });
+  }
+  await batch.commit();
+  return idler;
+}
+
+/** İşareti kaldırır — yalnız `bekliyor` durumunda çağrılmalıdır (UI bunu garanti eder). */
+export async function deleteTekrarIzleme(id: string): Promise<void> {
+  await deleteDoc(doc(db, "tekrarIzlemeler", id));
+}
+
+/** Takip raporu açıldığında işareti tamamlandı yapar ve rapora bağlar. */
+export async function tamamlaTekrarIzleme(
+  id: string,
+  veri: {
+    takipDegerlendirmeId: string;
+    takipFormId: string;
+    takipFormAd: string;
+    tamamlayanId: string;
+    tamamlayanAd: string;
+  }
+): Promise<void> {
+  await updateDoc(doc(db, "tekrarIzlemeler", id), {
+    ...veri,
+    durum: "tamamlandi",
+    tamamlanmaTarihi: serverTimestamp(),
     guncellemeTarihi: serverTimestamp(),
   });
 }

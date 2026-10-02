@@ -43,6 +43,8 @@ interface PuansizDegerlendirmeFormuProps {
   mevcutIzlenmeTarihi?: string;
   /** Devam edilen "yorumlu puanlı" raporun daha önce girilmiş toplam puanı (varsa). */
   mevcutToplamPuan?: number | null;
+  /** true ise bu rapor Puan Paneli'nden gelen bir tekrar izleme (takip) raporudur — başlıkta rozet gösterilir. */
+  tekrarIzleme?: boolean;
   onGeri: () => void;
 }
 
@@ -63,6 +65,7 @@ export default function PuansizDegerlendirmeFormu({
   mevcutPuansizCevaplar,
   mevcutIzlenmeTarihi,
   mevcutToplamPuan,
+  tekrarIzleme = false,
   onGeri,
 }: PuansizDegerlendirmeFormuProps) {
   const router = useRouter();
@@ -364,6 +367,11 @@ export default function PuansizDegerlendirmeFormu({
                 <span className="flex items-center gap-1 text-xs text-slate-500">
                   <Store size={12} /> {magaza.ad}
                 </span>
+                {tekrarIzleme && (
+                  <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                    Tekrar İzleme
+                  </span>
+                )}
               </div>
             </div>
           </div>

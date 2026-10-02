@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
+import ZayifPersonelFormuSecimi from "@/components/form/ZayifPersonelFormuSecimi";
 import { getFormlar, deleteForm, createForm, getForm, updateForm, getBolumler, getSorular } from "@/lib/firestore";
 import { formGerekliSinif } from "@/lib/homojenlik";
 import type { Form, Bolum, Soru, SkorlamaSistemi } from "@/types";
@@ -41,6 +42,7 @@ export default function FormlarPage() {
   const [yeniPuanGirisTipi, setYeniPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [yeniSkorlamaSistemi, setYeniSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [yeniMagazaFormu, setYeniMagazaFormu] = useState(false);
+  const [yeniZayifPersonelFormu, setYeniZayifPersonelFormu] = useState(false);
   const [yeniBolumler, setYeniBolumler] = useState<Bolum[]>([]);
   const [yeniSorularById, setYeniSorularById] = useState<Record<string, Soru>>({});
   const [yeniSeciliIds, setYeniSeciliIds] = useState<string[]>([]);
@@ -62,6 +64,7 @@ export default function FormlarPage() {
   const [editPuanGirisTipi, setEditPuanGirisTipi] = useState<PuanGirisTipi>("otomatik");
   const [editSkorlamaSistemi, setEditSkorlamaSistemi] = useState<SkorlamaSistemi>("esik");
   const [editMagazaFormu, setEditMagazaFormu] = useState(false);
+  const [editZayifPersonelFormu, setEditZayifPersonelFormu] = useState(false);
   const [editBolumler, setEditBolumler] = useState<Bolum[]>([]);
   const [editSorularById, setEditSorularById] = useState<Record<string, Soru>>({});
   const [editSeciliIds, setEditSeciliIds] = useState<string[]>([]);
@@ -79,7 +82,7 @@ export default function FormlarPage() {
 
   async function openYeni() {
     setYeniAd(""); setYeniAciklama(""); setYeniPuanli(true); setYeniPuanGirisTipi("otomatik"); setYeniSkorlamaSistemi("esik");
-    setYeniMagazaFormu(false);
+    setYeniMagazaFormu(false); setYeniZayifPersonelFormu(false);
     setYeniSeciliIds([]); setYeniBolumAra(""); setYeniError("");
     const [b, sorular] = await Promise.all([getBolumler(), getSorular()]);
     setYeniBolumler(b);
@@ -101,6 +104,7 @@ export default function FormlarPage() {
         puanGirisTipi: yeniPuanli ? yeniPuanGirisTipi : undefined,
         skorlamaSistemi: yeniPuanli && yeniPuanGirisTipi !== "manuel" ? yeniSkorlamaSistemi : undefined,
         magazaFormu: yeniMagazaFormu,
+        zayifPersonelFormu: yeniZayifPersonelFormu && !yeniMagazaFormu,
         bolumIdleri: yeniSeciliIds,
       });
       setYeniAcik(false);
@@ -136,6 +140,7 @@ export default function FormlarPage() {
       setEditPuanGirisTipi(f.puanGirisTipi ?? "otomatik");
       setEditSkorlamaSistemi(f.skorlamaSistemi ?? "esik");
       setEditMagazaFormu(f.magazaFormu ?? false);
+      setEditZayifPersonelFormu(f.zayifPersonelFormu ?? false);
       setEditSeciliIds(f.bolumIdleri);
     }
     setEditBolumler(tumBolumler);
@@ -157,6 +162,7 @@ export default function FormlarPage() {
         puanGirisTipi: editPuanli ? editPuanGirisTipi : undefined,
         skorlamaSistemi: editPuanli && editPuanGirisTipi !== "manuel" ? editSkorlamaSistemi : undefined,
         magazaFormu: editMagazaFormu,
+        zayifPersonelFormu: editZayifPersonelFormu && !editMagazaFormu,
         bolumIdleri: editSeciliIds,
       });
       setEditId(null);
@@ -315,6 +321,11 @@ export default function FormlarPage() {
                           Mağaza Formu
                         </span>
                       )}
+                      {form.zayifPersonelFormu && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700 whitespace-nowrap">
+                          Zayıf Personel
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-500 truncate max-w-xs">
@@ -386,7 +397,7 @@ export default function FormlarPage() {
             <input
               type="checkbox"
               checked={yeniMagazaFormu}
-              onChange={(e) => setYeniMagazaFormu(e.target.checked)}
+              onChange={(e) => { setYeniMagazaFormu(e.target.checked); if (e.target.checked) setYeniZayifPersonelFormu(false); }}
               className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
             />
             <span>
@@ -397,6 +408,11 @@ export default function FormlarPage() {
               </span>
             </span>
           </label>
+          <ZayifPersonelFormuSecimi
+            checked={yeniZayifPersonelFormu}
+            disabled={yeniMagazaFormu}
+            onChange={setYeniZayifPersonelFormu}
+          />
           <BolumSecimListesi bolumler={yeniBolumler} sorularById={yeniSorularById} seciliIds={yeniSeciliIds}
             formGerekliSinif={formGerekliSinif(yeniPuanli, yeniPuanGirisTipi)}
             onToggle={(id) => setYeniSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}
@@ -426,6 +442,11 @@ export default function FormlarPage() {
               {detayForm.magazaFormu && (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700">
                   Mağaza Formu
+                </span>
+              )}
+              {detayForm.zayifPersonelFormu && (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">
+                  Zayıf Personel Formu
                 </span>
               )}
               {detayForm.aciklama && <p className="text-sm text-slate-500 ml-1">{detayForm.aciklama}</p>}
@@ -506,7 +527,7 @@ export default function FormlarPage() {
               <input
                 type="checkbox"
                 checked={editMagazaFormu}
-                onChange={(e) => setEditMagazaFormu(e.target.checked)}
+                onChange={(e) => { setEditMagazaFormu(e.target.checked); if (e.target.checked) setEditZayifPersonelFormu(false); }}
                 className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
               />
               <span>
@@ -517,6 +538,11 @@ export default function FormlarPage() {
                 </span>
               </span>
             </label>
+            <ZayifPersonelFormuSecimi
+              checked={editZayifPersonelFormu}
+              disabled={editMagazaFormu}
+              onChange={setEditZayifPersonelFormu}
+            />
             <BolumSecimListesi bolumler={editBolumler} sorularById={editSorularById} seciliIds={editSeciliIds}
               formGerekliSinif={formGerekliSinif(editPuanli, editPuanGirisTipi)}
               onToggle={(id) => setEditSeciliIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])}

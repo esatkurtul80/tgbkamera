@@ -1,31 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TrendingUp, CalendarDays, Store, Search, Users, UserPlus, UserMinus, Play, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Star, AlertTriangle } from "lucide-react";
+import { TrendingUp, CalendarDays, Store, Search, Users, UserPlus, UserMinus, Play, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Star, AlertTriangle, Repeat } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getBolgeler, updateKullaniciFavoriMagazalar } from "@/lib/firestore";
+import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getBolgeler, updateKullaniciFavoriMagazalar, getBekleyenTekrarIzlemeler } from "@/lib/firestore";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import StatKart from "@/components/ui/StatKart";
+import Badge from "@/components/ui/Badge";
+import { oncekiAyDonemi } from "@/lib/puan";
 import type { Degerlendirme, Magaza, Personel, Form, Bolge, CevapSecenegi } from "@/types";
 
 interface KameramanStats {
   buAyDeg: number;
   acikDeg: number;
   buHaftaDeg: number;
-}
-
-function StatKart({ icon: Icon, title, value, renk }: {
-  icon: React.ElementType; title: string; value: number; renk: string;
-}) {
-  return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex-1 min-w-[200px]">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${renk}`}>
-        <Icon size={16} className="text-white" />
-      </div>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
-      <p className="text-sm text-slate-500 mt-0.5">{title}</p>
-    </div>
-  );
+  /** Havuzda bekleyen tekrar izleme sayısı (tüm kameramanlar için ortak). */
+  bekleyenTakip: number;
 }
 
 export default function KameramanPaneliPage() {
@@ -96,13 +87,16 @@ export default function KameramanPaneliPage() {
       setLoading(true);
       try {
         const now0 = new Date();
-        const [f, activeP, allM, list, allBolgeler, ayRaporlari] = await Promise.all([
+        const oncekiDonem = oncekiAyDonemi(now0);
+        const [f, activeP, allM, list, allBolgeler, ayRaporlari, bekleyenTakipler] = await Promise.all([
           getFormlar(),
           getAktifPersoneller(),
           getMagazalar(),
           getDegerlendirmeler({ kameramanId: user!.uid }),
           getBolgeler(),
           getDegerlendirmelerByAyYil(now0.getMonth(), now0.getFullYear()),
+          // Havuz okunamazsa (ör. kural eksik) panel yine açılsın
+          getBekleyenTekrarIzlemeler().catch((err) => { console.error("Tekrar izlemeler okunamadı:", err); return []; }),
         ]);
 
         setFormlar(f);
@@ -141,6 +135,8 @@ export default function KameramanPaneliPage() {
             const t = d.izlenmeTarihi?.toDate?.();
             return t && t >= haftaBaslangic;
           }).length,
+          // Havuz dönem bazlı: yalnız tamamlanan son ayın (bir önceki ay) bekleyenleri sayılır
+          bekleyenTakip: bekleyenTakipler.filter((t) => t.ay === oncekiDonem.ay && t.yil === oncekiDonem.yil).length,
         });
       } catch (err) {
         console.error("Error loading cameraman panel data:", err);
@@ -356,7 +352,7 @@ export default function KameramanPaneliPage() {
       {/* Stat kartları */}
       {loading ? (
         <div className="flex gap-4 flex-wrap w-full animate-pulse">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="bg-white rounded-2xl h-28 border border-slate-100 flex-1 min-w-[200px]" />
           ))}
         </div>
@@ -366,6 +362,14 @@ export default function KameramanPaneliPage() {
           <StatKart icon={Play} title="Devam Eden Rapor" value={stats?.acikDeg ?? 0} renk="bg-amber-500" />
           <StatKart icon={TrendingUp} title="Bu Hafta Rapor" value={stats?.buHaftaDeg ?? 0} renk="bg-teal-500" />
           <StatKart icon={Users} title="Toplam Personel" value={toplamPersonelSayisi} renk="bg-violet-500" />
+          <StatKart
+            icon={Repeat}
+            title="İzlenecekler (bekleyen)"
+            value={stats?.bekleyenTakip ?? 0}
+            renk="bg-orange-500"
+            href="/tekrar-izlemeler"
+            altMetin="Havuzu açmak için tıklayın"
+          />
         </div>
       )}
 
@@ -833,6 +837,7 @@ export default function KameramanPaneliPage() {
                           <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                             <p className="text-sm font-bold text-slate-800 group-hover:text-amber-900">{r.formAd}</p>
+                            {r.tekrarIzleme && <Badge variant="tekrar_izleme" />}
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5 ml-4">
                             Başlangıç: {r.olusturmaTarihi?.toDate?.().toLocaleDateString("tr-TR")}

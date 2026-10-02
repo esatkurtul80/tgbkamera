@@ -10,6 +10,7 @@ import {
   getDegerlendirme, getAcikDegerlendirmeler, getAylikDegerlendirmeler,
   updateDegerlendirmeIzlenmeler, setDegerlendirmeDurum,
   addHucreGecmisi, getHucreGecmisi,
+  getTekrarIzleme, tamamlaTekrarIzleme,
 } from "@/lib/firestore";
 import type { HucreGecmisKaydi } from "@/lib/firestore";
 import { hesaplaPuanFromIzlenmeler, soruPuanHesapla } from "@/lib/skorlama";
@@ -149,6 +150,9 @@ function YeniDegerlendirmeIcerik() {
   const devamId = searchParams.get("devam") || "";
   // Mağaza raporu modu: personel seçimi yoktur, rapor mağazanın kendisine aittir.
   const paramMagazaRaporu = searchParams.get("magazaRaporu") === "1";
+  // Tekrar izleme modu: Puan Paneli'nde işaretlenen zayıf personel için takip raporu.
+  // Tekilleştirme atlanır (her zaman yeni rapor), rapor işarete bağlanır.
+  const paramTakipId = searchParams.get("takipId") || "";
 
   /* Step 1 */
   const [adim, setAdim]           = useState<"secim" | "tablo">("secim");
@@ -241,6 +245,8 @@ function YeniDegerlendirmeIcerik() {
   }, [kapaliGunler, kapaliGunlerKey]);
   // Param'dan veya devam edilen kayıttan gelen mağaza raporu bilgisi
   const [magazaRaporuMu, setMagazaRaporuMu] = useState(false);
+  // Param'dan veya devam edilen kayıttan gelen tekrar izleme bağı
+  const [takipId, setTakipId] = useState<string | null>(null);
   // Devam edilen açık puansız raporun mevcut cevapları (varsa)
   const [devamPuansizCevaplar, setDevamPuansizCevaplar] = useState<Record<string, PuansizCevapDegeri> | undefined>(undefined);
   const [devamIzlenmeTarihi, setDevamIzlenmeTarihi] = useState<string | undefined>(undefined);
@@ -286,6 +292,7 @@ function YeniDegerlendirmeIcerik() {
           setAy(deg.ay);
           setYil(deg.yil);
           setMagazaRaporuMu(!!deg.magazaRaporu);
+          setTakipId(deg.takipId ?? null);
 
           const form = f.find(x => x.id === deg.formId) || await getForm(deg.formId);
           if (!form) return;
@@ -325,6 +332,18 @@ function YeniDegerlendirmeIcerik() {
           setMagazaRaporuMu(paramMagazaRaporu);
           setBaslaniyor(true);
 
+          // Yarış koruması: aynı havuz kaydını başka bir kameraman zaten raporlamaya
+          // başladıysa yeni rapor açmak yerine o rapora yönlen.
+          if (paramTakipId) {
+            const takip = await getTekrarIzleme(paramTakipId).catch(() => null);
+            if (takip?.durum === "tamamlandi" && takip.takipDegerlendirmeId) {
+              router.replace(`/degerlendirmeler/yeni?devam=${takip.takipDegerlendirmeId}`);
+              return;
+            }
+            if (!takip) console.warn("Tekrar izleme kaydı bulunamadı, normal rapor olarak devam ediliyor:", paramTakipId);
+            setTakipId(takip ? paramTakipId : null);
+          }
+
           const form = f.find(x => x.id === paramFormId) || await getForm(paramFormId);
           if (!form) { setBaslaniyor(false); return; }
           setForm(form);
@@ -341,11 +360,15 @@ function YeniDegerlendirmeIcerik() {
           // Bu personel/mağaza/ay için bu formda zaten bir rapor var mı? — varsa yeni
           // bir tane daha açmak yerine onu devam ettir (yinelenen rapor engellenir).
           // Puanlı matris raporları 'kapali' tutulduğu için arama durumdan bağımsızdır.
+          // Takip (tekrar izleme) raporları eşleşmeden hariçtir: normal rapor bir takip
+          // raporunu devam ettirmez; takip modunda ise tekilleştirme hiç yapılmaz.
           const matrisMi = form.puanli && form.puanGirisTipi !== "manuel";
-          const mevcutAcikRapor = (matrisMi
-            ? await getAylikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
-            : await getAcikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
-          ).find(d => d.formId === paramFormId);
+          const mevcutAcikRapor = paramTakipId
+            ? undefined
+            : (matrisMi
+              ? await getAylikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
+              : await getAcikDegerlendirmeler(paramPersonelId, paramMagazaId, now.getMonth(), now.getFullYear())
+            ).find(d => d.formId === paramFormId && !d.tekrarIzleme);
 
           if (mevcutAcikRapor) {
             // Eski akıştan 'acik' kalmış puanlı matris raporunu sessizce kapat
@@ -364,7 +387,7 @@ function YeniDegerlendirmeIcerik() {
             setDevamToplamPuan(mevcutAcikRapor.toplamPuan);
             setDegId(mevcutAcikRapor.id);
           } else {
-            const anahtar = `${paramMagazaId}|${paramPersonelId}|${paramFormId}`;
+            const anahtar = `${paramMagazaId}|${paramPersonelId}|${paramFormId}|${paramTakipId}`;
             if (olusturulanAnahtarRef.current !== anahtar) {
               olusturulanAnahtarRef.current = anahtar;
 
@@ -385,6 +408,7 @@ function YeniDegerlendirmeIcerik() {
                 personelId: paramPersonelId, personelAd: personelObj?.ad ?? "",
                 magazaId: paramMagazaId, magazaAd: magazaObj?.ad ?? "",
                 ...(paramMagazaRaporu ? { magazaRaporu: true } : {}),
+                ...(paramTakipId ? { takipId: paramTakipId, tekrarIzleme: true } : {}),
                 kameramanId: user!.uid, kameramanAd: kullanici?.displayName ?? user!.displayName ?? "",
                 ay: now.getMonth(), yil: now.getFullYear(),
                 puanli: form.puanli, puanGirisTipi: form.puanGirisTipi, skorlamaSistemi: form.skorlamaSistemi,
@@ -396,6 +420,17 @@ function YeniDegerlendirmeIcerik() {
                 durum: matrisMi ? "kapali" : "acik",
                 izlenmeTarihi: Timestamp.now(),
               });
+
+              // Takip raporu açıldı: havuzdaki işareti tamamlandı yap ve rapora bağla.
+              if (paramTakipId) {
+                tamamlaTekrarIzleme(paramTakipId, {
+                  takipDegerlendirmeId: newId,
+                  takipFormId: form.id,
+                  takipFormAd: form.ad,
+                  tamamlayanId: user!.uid,
+                  tamamlayanAd: kullanici?.displayName ?? user!.displayName ?? "",
+                }).catch((err) => console.error("Tekrar izleme kaydı güncellenemedi:", err));
+              }
 
               setIzlenmeler([]);
               setDegId(newId);
@@ -420,7 +455,7 @@ function YeniDegerlendirmeIcerik() {
     }
 
     yukle();
-  }, [devamId, paramMagazaId, paramPersonelId, paramFormId, paramMagazaRaporu, user, kullanici, router]);
+  }, [devamId, paramMagazaId, paramPersonelId, paramFormId, paramMagazaRaporu, paramTakipId, user, kullanici, router]);
 
   const isKameraman = kullanici?.rol === "kameraman";
   const authMagazaIdleri = kullanici?.magazaIdleri || [];
@@ -458,7 +493,7 @@ function YeniDegerlendirmeIcerik() {
     const mevcutAcikRapor = (matrisMi
       ? await getAylikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
       : await getAcikDegerlendirmeler(seciliPerId, seciliMagId, seciliAy, seciliYil)
-    ).find(d => d.formId === seciliFormId);
+    ).find(d => d.formId === seciliFormId && !d.tekrarIzleme);
 
     if (mevcutAcikRapor) {
       // Eski akıştan 'acik' kalmış puanlı matris raporunu sessizce kapat
@@ -770,6 +805,7 @@ function YeniDegerlendirmeIcerik() {
         mevcutPuansizCevaplar={devamPuansizCevaplar}
         mevcutIzlenmeTarihi={devamIzlenmeTarihi}
         mevcutToplamPuan={devamToplamPuan}
+        tekrarIzleme={!!takipId}
         onGeri={() => router.back()}
       />
     );
@@ -793,6 +829,11 @@ function YeniDegerlendirmeIcerik() {
             {magazaRaporuMu ? `${magaza?.ad} (Mağaza Raporu)` : personel?.ad}{" "}
             <span className="text-slate-400 font-normal text-xs ml-3">{magaza?.ad} / {bolumDetaylar.map(b => b.ad).join(", ")}</span>
           </h1>
+          {takipId && (
+            <span className="shrink-0 inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-orange-200 bg-orange-500/20 border border-orange-400/40 px-2 py-0.5 rounded-full">
+              Tekrar İzleme
+            </span>
+          )}
           <div className="h-5 w-px bg-white/20 shrink-0"></div>
           {puan && puan.maxPuan > 0 && (
             <div className="flex gap-6 items-center shrink-0">

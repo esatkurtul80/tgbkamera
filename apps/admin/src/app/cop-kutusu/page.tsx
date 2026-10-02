@@ -82,7 +82,12 @@ export default function CopKutusuPage() {
       header: "Tip",
       align: "center",
       width: "90px",
-      cell: (d) => <Badge variant={d.puanli ? "puanli" : "puansiz"} />,
+      cell: (d) => (
+        <div className="flex flex-col items-center gap-1">
+          <Badge variant={d.puanli ? "puanli" : "puansiz"} />
+          {d.tekrarIzleme && <Badge variant="tekrar_izleme" />}
+        </div>
+      ),
     },
     {
       key: "silen",

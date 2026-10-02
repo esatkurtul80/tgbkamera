@@ -8,6 +8,7 @@ type BadgeVariant =
   | "pasif"
   | "esik"
   | "oran"
+  | "tekrar_izleme"
   | KullaniciRol
   | SoruTipi;
 
@@ -19,6 +20,7 @@ const styles: Record<BadgeVariant, string> = {
   pasif: "bg-red-50 text-red-500",
   esik: "bg-amber-50 text-amber-600",
   oran: "bg-sky-50 text-sky-600",
+  tekrar_izleme: "bg-orange-50 text-orange-700",
   admin: "bg-violet-50 text-violet-700",
   sirketsahibi: "bg-rose-50 text-rose-700",
   ust_yonetici: "bg-orange-50 text-orange-700",
@@ -41,6 +43,7 @@ const labels: Record<BadgeVariant, string> = {
   pasif: "Pasif",
   esik: "Eşik",
   oran: "Oran",
+  tekrar_izleme: "Tekrar İzleme",
   admin: "Admin",
   sirketsahibi: "Şirket Sahibi",
   ust_yonetici: "Üst Yönetici",

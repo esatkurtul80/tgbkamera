@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
   LogOut, Camera, PanelLeftClose, PanelLeftOpen, MapIcon, Store, UserCog,
   TrendingUp, Plus, BarChart2, Trash2, Palette, Table, MessageSquare, File,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Gauge, Repeat, UserX,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { KullaniciRol } from "@/types";
@@ -36,6 +36,16 @@ const RAPOR_KATEGORILERI: NavItem[] = [
   { name: "Puansız Raporlar", href: "/tum-degerlendirmeler/puansiz", icon: File },
   { name: "Mağaza Raporları", href: "/tum-degerlendirmeler/magaza", icon: Store },
 ];
+
+// Zayıf personel akışı: seçim sayfası (Puan Paneli) + tekrar izleme havuzu, açılır grup.
+const ZAYIF_PERSONEL_GRUBU: NavItem = {
+  name: "Zayıf Personel", href: "/puan-paneli", icon: UserX,
+  children: [
+    { name: "Personel Seç", href: "/puan-paneli", icon: Gauge, exact: true },
+    { name: "İzlenecekler", href: "/tekrar-izlemeler", icon: Repeat },
+    { name: "Zayıf Personel Raporları", href: "/zayif-personel-raporlari", icon: ClipboardList },
+  ],
+};
 
 const adminSections: NavSection[] = [
   {
@@ -69,6 +79,7 @@ const adminSections: NavSection[] = [
         ],
       },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
+      ZAYIF_PERSONEL_GRUBU,
       { name: "Rapor Tasarımı", href: "/rapor-tasarimi", icon: Palette },
       { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
@@ -125,6 +136,7 @@ const kameramanSections: NavSection[] = [
     label: "RAPORLAMA",
     items: [
       { name: "Değerlendirmelerim", href: "/degerlendirmeler", icon: TrendingUp },
+      ZAYIF_PERSONEL_GRUBU,
       {
         name: "Tüm Değerlendirmeler", href: "/tum-degerlendirmeler", icon: ClipboardList,
         children: [

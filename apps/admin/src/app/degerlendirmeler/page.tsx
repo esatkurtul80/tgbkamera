@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, Eye, Store, Trash2, Pencil, Camera, CheckCircle2, Play, FileSpreadsheet, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import {
-  getDegerlendirmeler,
   getDegerlendirmelerByOlusturmaAraligi,
   softDeleteDegerlendirme,
 } from "@/lib/firestore";
@@ -27,9 +26,25 @@ function KameramanDegerlendirmelerView() {
   const [silId, setSilId] = useState<string | null>(null);
   const [siliyor, setSiliyor] = useState(false);
 
+  // Tüm Değerlendirmeler sayfasıyla aynı davranış: açılışta yalnız içinde bulunulan
+  // ayın raporları sunucudan çekilir; eski kayıtlara Rapor Oluşturma Tarihi
+  // aralığı seçilerek ulaşılır (seçilen aralık da sunucudan çekilir).
   useEffect(() => {
     if (!user) return;
-    getDegerlendirmeler({ kameramanId: user.uid }).then((d) => {
+    let iptal = false;
+    setLoading(true);
+    const ozelAralik = !!(tarihBaslangic || tarihBitis);
+    let baslangic: Date;
+    let bitis: Date;
+    if (ozelAralik) {
+      baslangic = tarihBaslangic ? new Date(tarihBaslangic) : new Date(2000, 0, 1);
+      bitis = tarihBitis ? new Date(tarihBitis) : new Date(2100, 0, 1);
+      bitis.setHours(23, 59, 59, 999);
+    } else {
+      ({ baslangic, bitis } = buAyAraligi());
+    }
+    getDegerlendirmelerByOlusturmaAraligi(baslangic, bitis, user.uid).then((d) => {
+      if (iptal) return;
       // Devam eden raporlar önce, sonra oluşturma tarihine göre en yeni
       const sorted = [...d].sort((a, b) => {
         if (devamEdiyorMu(a) && !devamEdiyorMu(b)) return -1;
@@ -38,8 +53,14 @@ function KameramanDegerlendirmelerView() {
       });
       setListe(sorted);
       setLoading(false);
+    }).catch((err) => {
+      if (iptal) return;
+      console.error("Değerlendirmelerim yüklenemedi:", err);
+      setListe([]);
+      setLoading(false);
     });
-  }, [user]);
+    return () => { iptal = true; };
+  }, [user, tarihBaslangic, tarihBitis]);
 
   async function handleSil() {
     if (!silId || !user) return;
@@ -56,48 +77,14 @@ function KameramanDegerlendirmelerView() {
   }
 
   const acikSayisi = liste.filter(devamEdiyorMu).length;
+  const ozelAralikSecili = !!(tarihBaslangic || tarihBitis);
 
-  const filtrelenmisListe = useMemo(() => {
-    if (!tarihBaslangic && !tarihBitis) return liste;
-    return liste.filter((d) => {
-      const t = d.olusturmaTarihi?.toDate?.();
-      if (!t) return false;
-      if (tarihBaslangic && t < new Date(tarihBaslangic)) return false;
-      if (tarihBitis) {
-        const bitis = new Date(tarihBitis);
-        bitis.setHours(23, 59, 59, 999);
-        if (t > bitis) return false;
-      }
-      return true;
-    });
-  }, [liste, tarihBaslangic, tarihBitis]);
-
-  const tarihToolbar = (
-    <div className="flex items-center gap-2 flex-wrap">
-      <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Rapor Oluşturma Tarihi:</label>
-      <input
-        type="date"
-        value={tarihBaslangic}
-        onChange={(e) => setTarihBaslangic(e.target.value)}
-        className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-      />
-      <span className="text-xs text-slate-400">–</span>
-      <input
-        type="date"
-        value={tarihBitis}
-        onChange={(e) => setTarihBitis(e.target.value)}
-        className="px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
-      />
-      {(tarihBaslangic || tarihBitis) && (
-        <button
-          onClick={() => { setTarihBaslangic(""); setTarihBitis(""); }}
-          className="px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Temizle
-        </button>
-      )}
-    </div>
-  );
+  /** Rapor Oluşturma Tarihi sütununun aralık filtresi değişince sunucudan yalnız o aralığı çeker
+   *  (Tüm Değerlendirmeler sayfasıyla aynı). Boş aralık = varsayılan "bu ay" görünümü. */
+  function handleTarihFiltresi(_key: string, aralik: { from: string; to: string }) {
+    setTarihBaslangic(aralik.from);
+    setTarihBitis(aralik.to);
+  }
 
   const columns: DataColumn<Degerlendirme>[] = [
     {
@@ -105,6 +92,7 @@ function KameramanDegerlendirmelerView() {
       header: "Durum",
       width: "145px",
       sortValue: (d) => (devamEdiyorMu(d) ? 1 : 0),
+      filterValue: (d) => (devamEdiyorMu(d) ? "Devam Ediyor" : "Tamamlandı"),
       cell: (d) =>
         devamEdiyorMu(d) ? (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
@@ -119,10 +107,24 @@ function KameramanDegerlendirmelerView() {
         ),
     },
     {
+      key: "olusturmaTarihi",
+      header: "Rapor Oluşturma Tarihi",
+      width: "150px",
+      sortValue: (d) => d.olusturmaTarihi?.seconds ?? 0,
+      searchValue: () => "",
+      filterDate: (d) => d.olusturmaTarihi?.toDate?.() ?? null,
+      cell: (d) => (
+        <span className="text-sm text-slate-500 whitespace-nowrap">
+          {d.olusturmaTarihi?.toDate?.().toLocaleDateString("tr-TR") ?? "—"}
+        </span>
+      ),
+    },
+    {
       key: "personel",
       header: "Personel",
       searchValue: (d) => d.personelAd,
       sortValue: (d) => d.personelAd,
+      filterValue: (d) => d.personelAd,
       cell: (d) => (
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
@@ -139,6 +141,7 @@ function KameramanDegerlendirmelerView() {
       header: "Mağaza",
       searchValue: (d) => d.magazaAd ?? "",
       sortValue: (d) => d.magazaAd ?? "",
+      filterValue: (d) => d.magazaAd ?? "—",
       cell: (d) =>
         d.magazaAd ? (
           <span className="inline-flex items-center gap-1 text-xs text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-medium">
@@ -153,6 +156,7 @@ function KameramanDegerlendirmelerView() {
       header: "Form",
       searchValue: (d) => d.formAd,
       sortValue: (d) => d.formAd,
+      filterValue: (d) => d.formAd,
       cell: (d) => <span className="text-sm text-slate-600">{d.formAd}</span>,
     },
     {
@@ -160,7 +164,14 @@ function KameramanDegerlendirmelerView() {
       header: "Tip",
       align: "center",
       width: "90px",
-      cell: (d) => <Badge variant={d.puanli ? "puanli" : "puansiz"} />,
+      sortValue: (d) => (d.puanli ? 1 : 0),
+      filterValue: (d) => `${d.puanli ? "Puanlı" : "Puansız"}${d.tekrarIzleme ? " · Tekrar İzleme" : ""}`,
+      cell: (d) => (
+        <div className="flex flex-col items-center gap-1">
+          <Badge variant={d.puanli ? "puanli" : "puansiz"} />
+          {d.tekrarIzleme && <Badge variant="tekrar_izleme" />}
+        </div>
+      ),
     },
     {
       key: "puan",
@@ -171,6 +182,7 @@ function KameramanDegerlendirmelerView() {
         if (!d.puanli || d.maxPuan === null || d.maxPuan === 0 || d.toplamPuan === null) return -1;
         return Math.round((d.toplamPuan / d.maxPuan) * 100);
       },
+      filterNumber: (d) => (d.puanli && d.toplamPuan !== null ? d.toplamPuan : null),
       cell: (d) => {
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300 text-xs">—</span>;
         const yuzde = d.maxPuan && d.maxPuan > 0 ? Math.round((d.toplamPuan / d.maxPuan) * 100) : null;
@@ -243,7 +255,12 @@ function KameramanDegerlendirmelerView() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Değerlendirmelerim</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{filtrelenmisListe.length} rapor</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {liste.length} rapor ·{" "}
+            {ozelAralikSecili
+              ? "seçili oluşturma tarihi aralığı"
+              : "bu ay (eski kayıtlar için Rapor Oluşturma Tarihi filtresini kullanın)"}
+          </p>
         </div>
         {acikSayisi > 0 && (
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
@@ -253,16 +270,20 @@ function KameramanDegerlendirmelerView() {
         )}
       </div>
       <DataTable
-        data={filtrelenmisListe}
+        data={liste}
         columns={columns}
         rowKey={(d) => d.id}
         loading={loading}
-        searchPlaceholder="Personel veya form ara..."
+        showSearch={false}
         emptyIcon={ClipboardList}
-        emptyTitle="Henüz değerlendirme yok"
-        emptyDescription="Panelinizdeki mağazalardan personel seçerek yeni bir değerlendirme başlatabilirsiniz."
+        emptyTitle={ozelAralikSecili ? "Bu aralıkta değerlendirme bulunamadı" : "Bu ay değerlendirme yok"}
+        emptyDescription={
+          ozelAralikSecili
+            ? "Farklı bir Rapor Oluşturma Tarihi aralığı deneyin."
+            : "Eski kayıtlar için Rapor Oluşturma Tarihi sütunundaki tarih aralığı filtresini kullanın; panelinizdeki mağazalardan personel seçerek yeni bir değerlendirme başlatabilirsiniz."
+        }
         defaultPageSize={10}
-        toolbar={tarihToolbar}
+        onDateFilterChange={handleTarihFiltresi}
       />
 
       <Modal open={!!silId} onClose={() => setSilId(null)} title="Değerlendirmeyi Sil" size="sm">
@@ -310,13 +331,14 @@ export default function DegerlendirmelerPage() {
 }
 
 /** Rapor kategorileri — ileride yeni kategoriler eklendikçe bu birlik genişletilir. */
-export type DegerlendirmeKategori = "puanli" | "yorumlu" | "puansiz" | "magaza";
+export type DegerlendirmeKategori = "puanli" | "yorumlu" | "puansiz" | "magaza" | "takip";
 
 function kategoriUygunMu(
-  d: { puanli?: boolean; puanGirisTipi?: string; magazaRaporu?: boolean },
+  d: { puanli?: boolean; puanGirisTipi?: string; magazaRaporu?: boolean; tekrarIzleme?: boolean },
   kategori?: DegerlendirmeKategori
 ): boolean {
   if (kategori === "magaza") return !!d.magazaRaporu;
+  if (kategori === "takip") return !!d.tekrarIzleme;
   if (!kategori) return true;
   const yorumluMu = !!d.puanli && d.puanGirisTipi === "manuel";
   if (kategori === "puanli") return !!d.puanli && !yorumluMu;
@@ -400,7 +422,13 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
   // diğer tüm sayfalardan (Tümü dahil) hariç tutulur.
   const hazirla = useCallback((d: Degerlendirme[]): Degerlendirme[] => {
     return d
-      .filter((x) => (kategori === "magaza" ? !!x.magazaRaporu : !x.magazaRaporu && kategoriUygunMu(x, kategori)))
+      // Mağaza raporları yalnız "magaza", takip (tekrar izleme) raporları yalnız "takip"
+      // kategorisinde listelenir; Tümü dahil diğer sayfalardan hariç tutulur.
+      .filter((x) =>
+        kategori === "magaza" ? !!x.magazaRaporu
+        : kategori === "takip" ? !!x.tekrarIzleme
+        : !x.magazaRaporu && !x.tekrarIzleme && kategoriUygunMu(x, kategori)
+      )
       .sort((a, b) => {
         if (devamEdiyorMu(a) && !devamEdiyorMu(b)) return -1;
         if (!devamEdiyorMu(a) && devamEdiyorMu(b)) return 1;
@@ -483,8 +511,8 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       ),
     },
     // Durum sütunu yalnızca açık/tamamlandı ayrımının anlamlı olduğu kategorilerde
-    // (yorumlu puanlı, puansız, mağaza) gösterilir; Tümü ve Puanlı sayfalarında gizli.
-    ...(kategori !== "yorumlu" && kategori !== "puansiz" && kategori !== "magaza" ? [] : [{
+    // (yorumlu puanlı, puansız, mağaza, takip) gösterilir; Tümü ve Puanlı sayfalarında gizli.
+    ...(kategori !== "yorumlu" && kategori !== "puansiz" && kategori !== "magaza" && kategori !== "takip" ? [] : [{
       key: "durum",
       header: "Durum" as React.ReactNode,
       width: "140px",
@@ -578,8 +606,13 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       align: "center",
       width: "90px",
       sortValue: (d) => (d.puanli ? 1 : 0),
-      filterValue: (d) => (d.puanli ? "Puanlı" : "Puansız"),
-      cell: (d) => <Badge variant={d.puanli ? "puanli" : "puansiz"} />,
+      filterValue: (d) => `${d.puanli ? "Puanlı" : "Puansız"}${d.tekrarIzleme ? " · Tekrar İzleme" : ""}`,
+      cell: (d) => (
+        <div className="flex flex-col items-center gap-1">
+          <Badge variant={d.puanli ? "puanli" : "puansiz"} />
+          {d.tekrarIzleme && <Badge variant="tekrar_izleme" />}
+        </div>
+      ),
     },
     {
       key: "puan",
@@ -587,6 +620,7 @@ export function AdminDegerlendirmelerView({ baslik = "Değerlendirmeler", katego
       align: "center",
       width: "130px",
       sortValue: (d) => d.toplamPuan ?? -1,
+      filterNumber: (d) => (d.puanli && d.toplamPuan !== null ? d.toplamPuan : null),
       cell: (d) => {
         if (!d.puanli || d.toplamPuan === null) return <span className="text-slate-300">—</span>;
         return <span className="text-sm font-semibold text-slate-800">{d.toplamPuan}</span>;

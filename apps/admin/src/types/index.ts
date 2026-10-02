@@ -97,6 +97,9 @@ export interface Form {
   /** true ise form mağaza raporlaması içindir: yalnız "Mağaza Raporla" akışında
    *  listelenir, personel raporlama form listelerinde görünmez. */
   magazaFormu?: boolean;
+  /** true ise bu form, tekrar izlemeye alınan (zayıf) personelin takip raporu için seçilebilir.
+   *  Tekrar İzlemeler havuzundaki "Raporla" listesi yalnız bu formları gösterir. Mağaza formuyla birlikte işaretlenemez. */
+  zayifPersonelFormu?: boolean;
   bolumIdleri: string[];
   olusturmaTarihi: Timestamp;
   guncellemeTarihi: Timestamp;
@@ -171,6 +174,11 @@ export interface Degerlendirme {
    *  yalnız "Mağaza Raporları" kategorisinde listelenir. */
   magazaRaporu?: boolean;
 
+  /** Bu rapor bir "tekrar izleme" takip raporudur — tekrarIzlemeler/{takipId} kaydına bağlıdır.
+   *  Takip raporları Puan Paneli'ndeki aylık ortalamaya katılmaz. */
+  takipId?: string;
+  tekrarIzleme?: boolean;
+
   puanli: boolean;
   /** puanli=true iken: "otomatik" (matris/izlenme bazlı, varsayılan) | "manuel" (yorumlu puanlı — puansız gibi cevaplanır, puan elle girilir). Formdan snapshot alınır. */
   puanGirisTipi?: "otomatik" | "manuel";
@@ -205,5 +213,51 @@ export interface CopKutusuKaydi extends Omit<Degerlendirme, "id"> {
   silenKullaniciAd: string;
   /** Firestore TTL politikası bu alana göre çalışır — silinmeTarihi + 30 gün. */
   otomatikSilinmeTarihi: Timestamp;
+}
+
+/** Tekrar izleme kaydının durumu: bekliyor → tamamlandi (takip raporu açıldığında) → silindi
+ *  (çöpe atıldı; bağlı takip raporu da cop_kutusu'na taşınır, 30 gün geri getirilebilir). */
+export type TekrarIzlemeDurum = "bekliyor" | "tamamlandi" | "silindi";
+
+/**
+ * Personel Seç sayfasında kameramanın "tekrar izlenecek" olarak işaretlediği personel kaydı.
+ * Ortak havuzdur: herhangi bir kameraman takip raporunu açabilir. İşaret kaldırma
+ * yalnız `bekliyor` durumunda (doküman silinir).
+ */
+export interface TekrarIzleme {
+  id: string;
+  personelId: string;
+  personelAd: string;
+  /** İşaretleme anında en düşük puanlı raporun mağazası — havuzda varsayılan mağaza. */
+  magazaId: string;
+  magazaAd: string;
+  /** Zayıf puanın ait olduğu dönem (ay 0-11). Takip raporu sonraki ayda yapılsa da değişmez. */
+  ay: number;
+  yil: number;
+  /** İşaretleme anındaki anlık değerler. */
+  ortalamaPuan: number;
+  raporSayisi: number;
+  /** Eski kayıtlar (eşik kavramı kaldırılmadan önce); yeni kayıtlara yazılmaz. */
+  esik?: number;
+  kaynakDegerlendirmeIdleri: string[];
+  durum: TekrarIzlemeDurum;
+  not?: string;
+  isaretleyenId: string;
+  isaretleyenAd: string;
+  olusturmaTarihi: Timestamp;
+  guncellemeTarihi: Timestamp;
+  /** durum === "tamamlandi" iken dolar */
+  takipDegerlendirmeId?: string;
+  takipFormId?: string;
+  takipFormAd?: string;
+  tamamlayanId?: string;
+  tamamlayanAd?: string;
+  tamamlanmaTarihi?: Timestamp;
+  /** durum === "silindi" iken dolar; geri getirilince silinir. */
+  silinmeTarihi?: Timestamp;
+  silenKullaniciId?: string;
+  silenKullaniciAd?: string;
+  /** Firestore TTL politikası (konsolda tanımlanırsa) bu alana göre kalıcı siler — silinmeTarihi + 30 gün. */
+  otomatikSilinmeTarihi?: Timestamp;
 }
 

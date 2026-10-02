@@ -91,6 +91,7 @@ bolgeler
 magazalar
   └─ id ← personel.magazaIdleri[]
            degerlendirmeler.magazaId
+           tekrarIzlemeler.magazaId
            users.magazaId
 
 sorular
@@ -107,6 +108,16 @@ formlar
 
 personel
   └─ id ← degerlendirmeler.personelId
+           tekrarIzlemeler.personelId
+
+degerlendirmeler
+  └─ id ← tekrarIzlemeler.kaynakDegerlendirmeIdleri[]   (zayıf puanın kaynağı)
+           tekrarIzlemeler.takipDegerlendirmeId           (açılan takip raporu)
+
+tekrarIzlemeler   (Puan Paneli → "tekrar izlenecek" işareti, ortak havuz)
+  └─ id ← degerlendirmeler.takipId   (takip raporu, tekrarIzleme: true)
+
+ayarlar  (tekil dokümanlar: raporTasarim)
 ```
 
 ---

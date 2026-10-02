@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, XCircle, MinusCircle, Target, FileSpreadsheet, FileDown } from "lucide-react";
-import { getDegerlendirme, getRaporTasarim, getOncekiRaporPuanlari } from "@/lib/firestore";
+import { CheckCircle2, XCircle, MinusCircle, Target, FileSpreadsheet, FileDown, Repeat } from "lucide-react";
+import { getDegerlendirme, getRaporTasarim, getOncekiRaporPuanlari, getTekrarIzleme } from "@/lib/firestore";
+import { donemEtiketi } from "@/lib/puan";
 import { soruPuanHesapla } from "@/lib/skorlama";
 import {
   pdfRaporBloklariOlustur,
@@ -18,7 +19,7 @@ import {
 import { fontCss, tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBmBolge } from "@/hooks/useBmBolge";
-import type { Degerlendirme } from "@/types";
+import type { Degerlendirme, TekrarIzleme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 
@@ -42,6 +43,8 @@ export default function DegerlendirmeRaporPage() {
   const [d, setD] = useState<Degerlendirme | null>(null);
   const [tasarim, setTasarim] = useState<RaporTasarimAyarlari>(() => tasarimBirlestir(null));
   const [sonRaporlar, setSonRaporlar] = useState<Degerlendirme[]>([]);
+  // Takip raporuysa bağlı olduğu tekrar izleme kaydı (yalnız ekranda bilgi şeridi; PDF/yazdırmaya girmez)
+  const [takip, setTakip] = useState<TekrarIzleme | null>(null);
   const [loading, setLoading] = useState(true);
   const [excelIndiriliyor, setExcelIndiriliyor] = useState(false);
   const [pdfIndiriliyor, setPdfIndiriliyor] = useState(false);
@@ -53,6 +56,7 @@ export default function DegerlendirmeRaporPage() {
       setLoading(false);
       // Personelin önceki son 3 rapor puanı — okunamazsa alan gösterilmez.
       if (data) getOncekiRaporPuanlari(data).then(setSonRaporlar).catch(() => {});
+      if (data?.takipId) getTekrarIzleme(data.takipId).then(setTakip).catch(() => {});
     });
   }, [id]);
 
@@ -165,6 +169,28 @@ export default function DegerlendirmeRaporPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Tekrar izleme bilgi şeridi (ekran) — rapor tasarımına ve çıktıya girmez ── */}
+      {d.tekrarIzleme && (
+        <div className="flex items-center gap-3 mb-5 px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 print:hidden">
+          <Repeat size={16} className="text-orange-600 shrink-0" />
+          <p className="text-sm text-orange-900">
+            <span className="font-semibold">Tekrar izleme raporu.</span>{" "}
+            {takip ? (
+              <>
+                {donemEtiketi(takip.ay, takip.yil)} döneminde ortalama puanı{" "}
+                <span className="font-bold">{takip.ortalamaPuan}</span> olduğu için{" "}
+                {takip.isaretleyenAd || "Kamera Gözlem"} tarafından tekrar izlemeye alındı.
+              </>
+            ) : (
+              "Zayıf Personel → Personel Seç sayfasında işaretlenen personel için açılan takip raporu."
+            )}
+          </p>
+          <Link href="/puan-paneli" className="ml-auto text-xs font-semibold text-orange-700 hover:underline whitespace-nowrap">
+            Personel Seç →
+          </Link>
+        </div>
+      )}
 
       {/* ── Puansız / yorumlu puanlı: PDF ile birebir aynı görünüm ─────────── */}
       {isPuansizNewFormat && (

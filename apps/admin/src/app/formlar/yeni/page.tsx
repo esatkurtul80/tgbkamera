@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import BolumSecimListesi from "@/components/degerlendirme/BolumSecimListesi";
+import ZayifPersonelFormuSecimi from "@/components/form/ZayifPersonelFormuSecimi";
 import { createForm, getBolumler, getSorular } from "@/lib/firestore";
 import { formGerekliSinif } from "@/lib/homojenlik";
 import type { Bolum, Soru } from "@/types";
@@ -15,6 +16,7 @@ export default function YeniFormPage() {
   const [aciklama, setAciklama] = useState("");
   const [puanli, setPuanli] = useState(true);
   const [magazaFormu, setMagazaFormu] = useState(false);
+  const [zayifPersonelFormu, setZayifPersonelFormu] = useState(false);
   const [bolumler, setBolumler] = useState<Bolum[]>([]);
   const [sorularById, setSorularById] = useState<Record<string, Soru>>({});
   const [seciliIds, setSeciliIds] = useState<string[]>([]);
@@ -41,7 +43,7 @@ export default function YeniFormPage() {
     if (!ad.trim()) { setError("Form adı boş bırakılamaz."); return; }
     setSaving(true);
     try {
-      await createForm({ ad: ad.trim(), aciklama: aciklama.trim(), puanli, magazaFormu, bolumIdleri: seciliIds });
+      await createForm({ ad: ad.trim(), aciklama: aciklama.trim(), puanli, magazaFormu, zayifPersonelFormu: zayifPersonelFormu && !magazaFormu, bolumIdleri: seciliIds });
       router.push("/formlar");
     } catch (err) {
       setError((err as Error).message);
@@ -107,7 +109,7 @@ export default function YeniFormPage() {
               <input
                 type="checkbox"
                 checked={magazaFormu}
-                onChange={(e) => setMagazaFormu(e.target.checked)}
+                onChange={(e) => { setMagazaFormu(e.target.checked); if (e.target.checked) setZayifPersonelFormu(false); }}
                 className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
               <span>
@@ -118,6 +120,10 @@ export default function YeniFormPage() {
                 </span>
               </span>
             </label>
+          </div>
+
+          <div>
+            <ZayifPersonelFormuSecimi checked={zayifPersonelFormu} disabled={magazaFormu} onChange={setZayifPersonelFormu} />
           </div>
         </div>
 
