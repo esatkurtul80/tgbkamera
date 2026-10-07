@@ -10,7 +10,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect, Stack, Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getPersonellerByMagaza,
@@ -187,6 +187,10 @@ export default function MagazaDetayScreen() {
   }
 
   // BM bölge dışı mağaza deep-link koruması (tüm hook'lardan sonra)
+  // Bölge müdürü için bu ekran yerine tarih aralıklı, personel bazlı BM mağaza detayı açılır
+  if (saltOkunur) {
+    return <Redirect href={{ pathname: '/bm/magaza/[id]', params: { id: magazaId, ad: magazaAd } }} />;
+  }
   if (saltOkunur && !bmYukleniyor && !bmMagazalar.has(magazaId)) {
     return <ErisimYok />;
   }

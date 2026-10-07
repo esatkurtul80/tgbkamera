@@ -19,13 +19,14 @@ import {
   updateKullaniciFavoriMagazalar,
 } from '@/lib/firestore';
 import type { Magaza, Kullanici } from '@/lib/types';
+import BmMagazalar from '@/components/bm/BmMagazalar';
 
 /**
  * Mağazalarım — webdeki kameraman panelindeki mağaza tablosunun mobil karşılığı:
  * favoriler/tümü görünümü, arama, bölge müdürü filtresi, favori yıldızı.
  * Mağazaya dokununca personel listesi ve rapor başlatma ekranına gidilir.
  */
-export default function MagazalarScreen() {
+function KameramanMagazalarScreen() {
   const router = useRouter();
   const { user, kullanici } = useAuth();
 
@@ -269,3 +270,10 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 44 },
   emptyTitle: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 21 },
 });
+
+/** Rol dallanması: bölge müdürü kendi mağazalarını tarih aralıklı özetle görür; diğer roller kameraman görünümü. */
+export default function MagazalarScreen() {
+  const { kullanici } = useAuth();
+  if (kullanici?.rol === 'bolge_muduru') return <BmMagazalar />;
+  return <KameramanMagazalarScreen />;
+}

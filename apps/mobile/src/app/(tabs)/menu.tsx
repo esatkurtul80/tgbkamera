@@ -61,18 +61,15 @@ const adminMenu: MenuBolum[] = [
   { etiket: 'SİSTEM', ogeler: [{ ad: 'Kullanıcılar', ikon: '⚙️', native: '/yonetim/kullanicilar' }] },
 ];
 
-// Bölge müdürü salt okunur: değerlendirme oluşturma/düzenleme ve yönetim ekranları yok
+// Bölge müdürü salt okunur ve yalnız kendi mağazalarını görür: admin/kameraman ekranları yok
 const bolgeMuduruMenu: MenuBolum[] = [
   {
-    etiket: 'GENEL',
+    etiket: 'BÖLGEM',
     ogeler: [
       { ad: 'Panel', ikon: '📊', native: '/' },
       { ad: 'Mağazalarım', ikon: '🏬', native: '/magazalar' },
+      { ad: 'Raporlar', ikon: '📋', native: '/tumu' },
     ],
-  },
-  {
-    etiket: 'RAPORLAMA',
-    ogeler: [{ ad: 'Değerlendirmeler', ikon: '📋', native: '/tumu' }],
   },
 ];
 
@@ -177,10 +174,14 @@ export default function MenuScreen() {
         </View>
       ))}
 
-      <Text style={styles.webNot}>
-        "WEB" işaretli sayfalar tarayıcıda açılır — ilk açılışta web paneline Google ile bir kez
-        giriş yapmanız istenebilir, sonrasında oturum tarayıcıda kalır.
-      </Text>
+      {bolumler.some((b) => b.ogeler.some((o) => o.web)) ? (
+        <Text style={styles.webNot}>
+          "WEB" işaretli sayfalar tarayıcıda açılır — ilk açılışta web paneline Google ile bir kez
+          giriş yapmanız istenebilir, sonrasında oturum tarayıcıda kalır.
+        </Text>
+      ) : (
+        <View style={{ height: 12 }} />
+      )}
 
       <TouchableOpacity style={styles.cikisBtn} onPress={cikisSor} activeOpacity={0.8}>
         <Text style={styles.cikisText}>Çıkış Yap</Text>

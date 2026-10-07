@@ -710,3 +710,31 @@ export async function createDegerlendirme(
   });
   return customId;
 }
+
+/** Verilen mağazaların belirli tarih aralığındaki (olusturmaTarihi) raporları — bölge
+ *  müdürü ekranlarının tarih filtresi. Mevcut magazaId+olusturmaTarihi indeksini kullanır. */
+export async function getDegerlendirmelerByMagazaIdsAralik(
+  magazaIdleri: string[],
+  baslangic: Date,
+  bitis: Date
+): Promise<Degerlendirme[]> {
+  if (magazaIdleri.length === 0) return [];
+  const parcalar: string[][] = [];
+  for (let i = 0; i < magazaIdleri.length; i += 10) parcalar.push(magazaIdleri.slice(i, i + 10));
+  const snaplar = await Promise.all(
+    parcalar.map((ids) =>
+      getDocs(
+        query(
+          collection(db, 'degerlendirmeler'),
+          where('magazaId', 'in', ids),
+          where('olusturmaTarihi', '>=', Timestamp.fromDate(baslangic)),
+          where('olusturmaTarihi', '<=', Timestamp.fromDate(bitis)),
+          orderBy('olusturmaTarihi', 'desc')
+        )
+      )
+    )
+  );
+  const hepsi = snaplar.flatMap((s) => s.docs.map((d) => toDoc<Degerlendirme>(d)));
+  hepsi.sort((a, b) => (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0));
+  return hepsi;
+}

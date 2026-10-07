@@ -25,6 +25,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useBmMagazalar } from '@/hooks/useBmMagazalar';
 import type { Degerlendirme } from '@/lib/types';
+import BmRaporlar from '@/components/bm/BmRaporlar';
 
 const SAYFA_BOYU = 100;
 const AYLAR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -282,7 +283,7 @@ function FiltrePaneli({
 
 /* ────────────────────────── Ana ekran ────────────────────────── */
 
-export default function TumDegerlendirmelerScreen() {
+function TumDegerlendirmelerIc() {
   const router = useRouter();
   const { kullanici } = useAuth();
   // Bölge müdürü: sonuçlar her koşulda kendi bölgesinin mağazalarıyla sınırlanır
@@ -693,3 +694,10 @@ const st = StyleSheet.create({
   listeSatirTextSecili: { color: '#4338ca', fontWeight: '800' },
   listeCheck: { fontSize: 14, fontWeight: '800', color: '#4f46e5' },
 });
+
+/** Rol dallanması: bölge müdürü mağaza mağaza gruplu, tarih aralıklı kendi rapor ekranını görür. */
+export default function TumDegerlendirmelerScreen() {
+  const { kullanici } = useAuth();
+  if (kullanici?.rol === 'bolge_muduru') return <BmRaporlar />;
+  return <TumDegerlendirmelerIc />;
+}
