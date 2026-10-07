@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   getPersoneller,
   getMagazalar,
-  getBolgeler,
   getKullanicilar,
   getDegerlendirmeler,
 } from "@/lib/firestore";
@@ -16,7 +15,7 @@ interface Stats {
   toplamPersonel: number;
   aktifPersonel: number;
   toplamMagaza: number;
-  toplamBolge: number;
+  toplamBolgeMuduru: number;
   toplamKameraman: number;
   buAyDegerlendirme: number;
   bugunDegerlendirme: number;
@@ -174,8 +173,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadData() {
-      const [personeller, magazalarData, bolgeler, kullanicilar, degerlendirmeler] = await Promise.all([
-        getPersoneller(), getMagazalar(), getBolgeler(), getKullanicilar(), getDegerlendirmeler(),
+      const [personeller, magazalarData, kullanicilar, degerlendirmeler] = await Promise.all([
+        getPersoneller(), getMagazalar(), getKullanicilar(), getDegerlendirmeler(),
       ]);
 
       const now = new Date();
@@ -195,7 +194,7 @@ export default function DashboardPage() {
         toplamPersonel: personeller.length,
         aktifPersonel: personeller.filter((p) => p.aktif).length,
         toplamMagaza: magazalarData.length,
-        toplamBolge: bolgeler.length,
+        toplamBolgeMuduru: kullanicilar.filter((k) => k.rol === "bolge_muduru" && k.aktif !== false).length,
         toplamKameraman: kullanicilar.filter((k) => k.rol === "kameraman").length,
         buAyDegerlendirme: buAy.length,
         bugunDegerlendirme: bugun.length,
@@ -243,7 +242,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Users} title="Personel" value={stats?.toplamPersonel ?? 0} sub={`${stats?.aktifPersonel} aktif`} color="bg-indigo-500" href="/personel" />
-        <StatCard icon={Store} title="Mağazalar" value={stats?.toplamMagaza ?? 0} sub={`${stats?.toplamBolge} bölge`} color="bg-teal-500" href="/magazalar" />
+        <StatCard icon={Store} title="Mağazalar" value={stats?.toplamMagaza ?? 0} sub={`${stats?.toplamBolgeMuduru} bölge müdürü`} color="bg-teal-500" href="/magazalar" />
         <StatCard icon={ClipboardList} title="Bu Ay Değerlendirme" value={stats?.buAyDegerlendirme ?? 0} sub={`${stats?.bugunDegerlendirme} bugün`} color="bg-blue-500" href="/degerlendirmeler" />
         <StatCard icon={Camera} title="Kamera Gözlem" value={stats?.toplamKameraman ?? 0} sub={`${stats?.toplamDegerlendirme} toplam rapor`} color="bg-violet-500" href="/kullanicilar" />
       </div>
@@ -271,7 +270,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Bölgeler", href: "/bolgeler", icon: MapIcon, color: "text-blue-600 bg-blue-50" },
+          { label: "Mağazalar", href: "/magazalar", icon: Store, color: "text-teal-600 bg-teal-50" },
           { label: "Formlar", href: "/formlar", icon: ClipboardList, color: "text-indigo-600 bg-indigo-50" },
           { label: "Kullanıcılar", href: "/kullanicilar", icon: Users, color: "text-violet-600 bg-violet-50" },
           { label: "Raporlar", href: "/degerlendirmeler", icon: TrendingUp, color: "text-emerald-600 bg-emerald-50" },

@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
-  LogOut, Camera, PanelLeftClose, PanelLeftOpen, MapIcon, Store, UserCog,
+  LogOut, Camera, PanelLeftClose, PanelLeftOpen, Store, UserCog,
   TrendingUp, Plus, BarChart2, Trash2, Palette, Table, MessageSquare, File,
-  ChevronDown, ChevronRight, Gauge, Repeat, UserX,
+  ChevronDown, ChevronRight, Gauge, Repeat, UserX, BarChart3, Trophy,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import type { KullaniciRol } from "@/types";
@@ -47,6 +47,15 @@ const ZAYIF_PERSONEL_GRUBU: NavItem = {
   ],
 };
 
+// Raporlamalar: tarih aralığı bazlı puan raporları, açılır grup.
+// Yeni raporlama sayfası eklendikçe children'a eklenir (apps/admin/src/app/raporlamalar/<slug>/page.tsx).
+const RAPORLAMALAR_GRUBU: NavItem = {
+  name: "Raporlamalar", href: "/raporlamalar/puan", icon: BarChart3,
+  children: [
+    { name: "Puan Raporlamaları", href: "/raporlamalar/puan", icon: Trophy },
+  ],
+};
+
 const adminSections: NavSection[] = [
   {
     label: "GENEL",
@@ -55,7 +64,6 @@ const adminSections: NavSection[] = [
   {
     label: "YAPI",
     items: [
-      { name: "Bölgeler", href: "/bolgeler", icon: MapIcon },
       { name: "Mağazalar", href: "/magazalar", icon: Store },
       { name: "Personel", href: "/personel", icon: Users },
     ],
@@ -80,6 +88,7 @@ const adminSections: NavSection[] = [
       },
       { name: "Aylık İzlenme", href: "/raporlar/aylik-izlenme", icon: BarChart2 },
       ZAYIF_PERSONEL_GRUBU,
+      RAPORLAMALAR_GRUBU,
       { name: "Rapor Tasarımı", href: "/rapor-tasarimi", icon: Palette },
       { name: "Çöp Kutusu", href: "/cop-kutusu", icon: Trash2 },
     ],
@@ -137,6 +146,7 @@ const kameramanSections: NavSection[] = [
     items: [
       { name: "Değerlendirmelerim", href: "/degerlendirmeler", icon: TrendingUp },
       ZAYIF_PERSONEL_GRUBU,
+      RAPORLAMALAR_GRUBU,
       {
         name: "Tüm Değerlendirmeler", href: "/tum-degerlendirmeler", icon: ClipboardList,
         children: [

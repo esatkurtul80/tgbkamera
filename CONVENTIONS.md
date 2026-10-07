@@ -84,9 +84,9 @@ Yeni bir koleksiyon başka koleksiyonlara referans veriyorsa,
 ilgili `create*` ve `update*` fonksiyonlarında **her iki tarafı da güncelle.**
 
 ```
-bolgeler
-  └─ id ← magazalar.bolgeId
-           users.bolgeId
+users  (rol: bolge_muduru → ad soyad BÜYÜK HARFLE saklanır)
+  └─ id ← magazalar.bolgeMuduruId   (bölge müdürü ataması; Mağazalar sayfasından yapılır,
+                                      ayrı "bolgeler" koleksiyonu yoktur — Ekim 2026'da kaldırıldı)
 
 magazalar
   └─ id ← personel.magazaIdleri[]

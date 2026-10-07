@@ -14,12 +14,11 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getMagazalar,
-  getMagazalarByBolge,
-  getBolgeler,
+  getMagazalarByBolgeMuduru,
   getBolgeMudurleri,
   updateKullaniciFavoriMagazalar,
 } from '@/lib/firestore';
-import type { Magaza, Bolge, Kullanici } from '@/lib/types';
+import type { Magaza, Kullanici } from '@/lib/types';
 
 /**
  * Mağazalarım — webdeki kameraman panelindeki mağaza tablosunun mobil karşılığı:
@@ -31,7 +30,6 @@ export default function MagazalarScreen() {
   const { user, kullanici } = useAuth();
 
   const [magazalar, setMagazalar] = useState<Magaza[]>([]);
-  const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
   const [mudurler, setMudurler] = useState<Kullanici[]>([]);
   const [favoriler, setFavoriler] = useState<string[]>([]);
   const [gorunum, setGorunum] = useState<'favoriler' | 'tumu'>('favoriler');
@@ -45,25 +43,17 @@ export default function MagazalarScreen() {
   const load = useCallback(async () => {
     if (!user || !kullanici) return;
     try {
-      // BM yalnız kendi bölgesinin mağazalarını görür; müdür filtresi de gereksiz
-      const [m, b, md] = await Promise.all([
-        bm ? Promise.resolve([] as Magaza[]) : getMagazalar(),
-        getBolgeler(),
-        bm ? Promise.resolve([] as Kullanici[]) : getBolgeMudurleri(),
+      // BM yalnız kendisine atanmış mağazaları görür (magazalar.bolgeMuduruId); müdür filtresi gereksiz
+      const [m, md] = await Promise.all([
+        bm ? getMagazalarByBolgeMuduru(user.uid) : getMagazalar(),
+        bm ? Promise.resolve([] as Kullanici[]) : getBolgeMudurleri().catch(() => [] as Kullanici[]),
       ]);
-      let benim: Magaza[];
-      if (bm) {
-        const bolgem =
-          (kullanici.bolgeId ? b.find((x) => x.id === kullanici.bolgeId) : undefined) ??
-          b.find((x) => x.bolgeMuduruId === user.uid);
-        benim = bolgem ? await getMagazalarByBolge(bolgem.id) : [];
-      } else {
-        benim = kullanici.magazaIdleri?.length
+      const benim: Magaza[] = bm
+        ? m
+        : kullanici.magazaIdleri?.length
           ? m.filter((x) => kullanici.magazaIdleri!.includes(x.id))
           : m;
-      }
       setMagazalar(benim);
-      setBolgeler(b);
       setMudurler(md);
       setFavoriler(kullanici.favoriMagazaIdleri ?? []);
     } finally {
@@ -78,9 +68,10 @@ export default function MagazalarScreen() {
     }, [load])
   );
 
-  const bolgeAdi = useCallback(
-    (bolgeId?: string) => bolgeler.find((b) => b.id === bolgeId)?.ad ?? '',
-    [bolgeler]
+  /** Mağazanın bölge müdürü adı (users.displayName, büyük harfle saklanır). */
+  const mudurAdi = useCallback(
+    (mudurId?: string | null) => (mudurId ? mudurler.find((k) => k.id === mudurId)?.displayName ?? '' : ''),
+    [mudurler]
   );
 
   async function favoriToggle(magazaId: string) {
@@ -102,12 +93,11 @@ export default function MagazalarScreen() {
       liste = liste.filter((m) => favoriler.includes(m.id));
     }
     if (seciliMudurId) {
-      const mudurBolgeleri = bolgeler.filter((b) => b.bolgeMuduruId === seciliMudurId).map((b) => b.id);
-      liste = liste.filter((m) => m.bolgeId && mudurBolgeleri.includes(m.bolgeId));
+      liste = liste.filter((m) => m.bolgeMuduruId === seciliMudurId);
     }
     if (arama.trim()) {
       const q = arama.toLowerCase();
-      liste = liste.filter((m) => m.ad.toLowerCase().includes(q) || bolgeAdi(m.bolgeId).toLowerCase().includes(q));
+      liste = liste.filter((m) => m.ad.toLowerCase().includes(q) || mudurAdi(m.bolgeMuduruId).toLowerCase().includes(q));
     }
     // Favoriler önce
     return [...liste].sort((a, b) => {
@@ -115,7 +105,7 @@ export default function MagazalarScreen() {
       const bf = favoriler.includes(b.id) ? 0 : 1;
       return af !== bf ? af - bf : a.ad.localeCompare(b.ad, 'tr');
     });
-  }, [magazalar, gorunum, favoriler, seciliMudurId, arama, bolgeler, bolgeAdi]);
+  }, [magazalar, gorunum, favoriler, seciliMudurId, arama, mudurAdi]);
 
   return (
     <View style={styles.container}>
@@ -210,8 +200,8 @@ export default function MagazalarScreen() {
                 </TouchableOpacity>
                 <View style={styles.satirInfo}>
                   <Text style={styles.magazaAd}>{item.ad}</Text>
-                  {bolgeAdi(item.bolgeId) ? (
-                    <Text style={styles.bolgeAd}>📍 {bolgeAdi(item.bolgeId)}</Text>
+                  {mudurAdi(item.bolgeMuduruId) ? (
+                    <Text style={styles.bolgeAd}>👤 {mudurAdi(item.bolgeMuduruId)}</Text>
                   ) : null}
                 </View>
                 <Text style={styles.ok}>›</Text>

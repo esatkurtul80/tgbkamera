@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   UserCog, Pencil, Search, Plus, CheckCircle2, XCircle, Shield, Store, Check,
 } from "lucide-react";
@@ -12,10 +13,9 @@ import {
   createKullanici,
   getKullanici,
   updateKullanici,
-  getBolgeler,
   getMagazalar,
 } from "@/lib/firestore";
-import type { Kullanici, KullaniciRol, Bolge, Magaza } from "@/types";
+import type { Kullanici, KullaniciRol, Magaza } from "@/types";
 import { ROL_ETIKETLERI } from "@/types";
 
 const ROLLER: KullaniciRol[] = [
@@ -26,6 +26,39 @@ const ROLLER: KullaniciRol[] = [
   "magaza_sorumlusu",
   "kameraman",
 ];
+
+/**
+ * Kaydedilecek ad: bölge müdürü rolünde ad soyad BÜYÜK HARFLE saklanır (raporlarda ve
+ * mağaza atamalarında bu adla görünür); diğer roller yalnız kırpılır.
+ */
+function adDuzenle(ad: string, rol: KullaniciRol): string {
+  const temiz = ad.trim().replace(/\s+/g, " ");
+  return rol === "bolge_muduru" ? temiz.toLocaleUpperCase("tr-TR") : temiz;
+}
+
+/** Bölge müdürü formunda bölge alanı yok: mağaza ataması Mağazalar sayfasından yapılır. */
+function BmBilgiNotu({ magazalar = [] }: { magazalar?: Magaza[] }) {
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-3 text-xs text-blue-800 space-y-1.5">
+      <p>
+        Ad soyad <span className="font-semibold">büyük harfle</span> kaydedilir. Mağaza ataması{" "}
+        <Link href="/magazalar" className="font-semibold underline underline-offset-2">Mağazalar</Link>{" "}
+        sayfasındaki mağaza kartından yapılır.
+      </p>
+      {magazalar.length > 0 ? (
+        <div className="flex flex-wrap gap-1 pt-0.5">
+          {magazalar.map((m) => (
+            <span key={m.id} className="inline-flex items-center gap-1 bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded font-medium">
+              <Store size={10} /> {m.ad}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-blue-600/80">Henüz mağaza atanmamış.</p>
+      )}
+    </div>
+  );
+}
 
 function MagazaCheckList({ magazalar, seciliIds, onToggle, onTumunuSec, onTumunuKaldir, araVal, onAraChange }: {
   magazalar: Magaza[];
@@ -86,7 +119,6 @@ function MagazaCheckList({ magazalar, seciliIds, onToggle, onTumunuSec, onTumunu
 
 export default function KullanicilarPage() {
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
-  const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
   const [magazalar, setMagazalar] = useState<Magaza[]>([]);
   const [loading, setLoading] = useState(true);
   const [ara, setAra] = useState("");
@@ -97,7 +129,6 @@ export default function KullanicilarPage() {
   const [yeniDisplayName, setYeniDisplayName] = useState("");
   const [yeniEmail, setYeniEmail] = useState("");
   const [yeniRol, setYeniRol] = useState<KullaniciRol>("kameraman");
-  const [yeniBolgeId, setYeniBolgeId] = useState("");
   const [yeniMagazaId, setYeniMagazaId] = useState("");
   const [yeniMagazaIdleri, setYeniMagazaIdleri] = useState<string[]>([]);
   const [yeniMagazaAra, setYeniMagazaAra] = useState("");
@@ -108,7 +139,6 @@ export default function KullanicilarPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editRol, setEditRol] = useState<KullaniciRol>("kameraman");
-  const [editBolgeId, setEditBolgeId] = useState("");
   const [editMagazaId, setEditMagazaId] = useState("");
   const [editMagazaIdleri, setEditMagazaIdleri] = useState<string[]>([]);
   const [editMagazaAra, setEditMagazaAra] = useState("");
@@ -119,9 +149,8 @@ export default function KullanicilarPage() {
 
   async function load() {
     setLoading(true);
-    const [k, b, m] = await Promise.all([getKullanicilar(), getBolgeler(), getMagazalar()]);
+    const [k, m] = await Promise.all([getKullanicilar(), getMagazalar()]);
     setKullanicilar(k);
-    setBolgeler(b);
     setMagazalar(m);
     setLoading(false);
   }
@@ -129,7 +158,7 @@ export default function KullanicilarPage() {
 
   function openYeni() {
     setYeniDisplayName(""); setYeniEmail(""); setYeniRol("kameraman");
-    setYeniBolgeId(""); setYeniMagazaId(""); setYeniMagazaIdleri([]); setYeniMagazaAra(""); setYeniError("");
+    setYeniMagazaId(""); setYeniMagazaIdleri([]); setYeniMagazaAra(""); setYeniError("");
     setYeniAcik(true);
   }
 
@@ -139,10 +168,9 @@ export default function KullanicilarPage() {
     if (!yeniEmail.trim()) { setYeniError("E-posta boş bırakılamaz."); return; }
     setYeniSaving(true);
     await createKullanici({
-      displayName: yeniDisplayName.trim(),
+      displayName: adDuzenle(yeniDisplayName, yeniRol),
       email: yeniEmail.trim(),
       rol: yeniRol,
-      bolgeId: yeniBolgeId || undefined,
       magazaId: yeniMagazaId || undefined,
       magazaIdleri: yeniRol === "kameraman" ? yeniMagazaIdleri : undefined,
     });
@@ -160,7 +188,6 @@ export default function KullanicilarPage() {
       const gecerliMagazaIdleri = magazalar.map((m) => m.id);
       setEditDisplayName(k.displayName || "");
       setEditRol(k.rol || "kameraman");
-      setEditBolgeId(k.bolgeId ?? "");
       setEditMagazaId(k.magazaId ?? "");
       // Silinmiş/artık var olmayan mağazalara ait id'ler filtrelenir — aksi halde sayaç "seçili" gösterir ama listede hiçbir kutu işaretli görünmez.
       setEditMagazaIdleri((k.magazaIdleri ?? []).filter((mid) => gecerliMagazaIdleri.includes(mid)));
@@ -176,9 +203,8 @@ export default function KullanicilarPage() {
     setEditError("");
     try {
       await updateKullanici(editId, {
-        displayName: editDisplayName.trim(),
+        displayName: adDuzenle(editDisplayName, editRol),
         rol: editRol,
-        bolgeId: editBolgeId || null,
         magazaId: editMagazaId || null,
         magazaIdleri: editRol === "kameraman" ? editMagazaIdleri : null,
         aktif: editAktif,
@@ -201,18 +227,16 @@ export default function KullanicilarPage() {
     return araEslesen && rolEslesen;
   });
 
-  function bolgeAdi(id?: string) {
-    if (!id) return null;
-    return bolgeler.find((b) => b.id === id)?.ad ?? null;
-  }
-
   function magazaAdi(id?: string) {
     if (!id) return null;
     return magazalar.find((m) => m.id === id)?.ad ?? null;
   }
 
-  const showBolgeField = (rol: KullaniciRol) =>
-    rol === "bolge_muduru" || rol === "ust_yonetici";
+  /** Bölge müdürünün sorumlu olduğu mağazalar (magazalar.bolgeMuduruId); atama Mağazalar sayfasından yapılır. */
+  function bmMagazalari(kullaniciId: string): Magaza[] {
+    return magazalar.filter((m) => m.bolgeMuduruId === kullaniciId);
+  }
+
   const showMagazaField = (rol: KullaniciRol) =>
     rol === "magaza_sorumlusu";
   const showMagazaCokluField = (rol: KullaniciRol) =>
@@ -315,10 +339,17 @@ export default function KullanicilarPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-500">
-                    {k.bolgeId && bolgeAdi(k.bolgeId) ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                        {bolgeAdi(k.bolgeId)}
-                      </span>
+                    {k.rol === "bolge_muduru" ? (
+                      bmMagazalari(k.id).length > 0 ? (
+                        <span
+                          title={bmMagazalari(k.id).map((m) => m.ad).join(", ")}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium"
+                        >
+                          {bmMagazalari(k.id).length} Mağaza
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">Mağaza atanmamış</span>
+                      )
                     ) : k.magazaId && magazaAdi(k.magazaId) ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 text-teal-700 rounded text-xs font-medium">
                         {magazaAdi(k.magazaId)}
@@ -387,7 +418,7 @@ export default function KullanicilarPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Rol</label>
             <select
               value={yeniRol}
-              onChange={(e) => { setYeniRol(e.target.value as KullaniciRol); setYeniBolgeId(""); setYeniMagazaId(""); }}
+              onChange={(e) => { setYeniRol(e.target.value as KullaniciRol); setYeniMagazaId(""); }}
               className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               {ROLLER.map((r) => (
@@ -395,21 +426,7 @@ export default function KullanicilarPage() {
               ))}
             </select>
           </div>
-          {showBolgeField(yeniRol) && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Bölge <span className="text-slate-400 font-normal">(isteğe bağlı)</span>
-              </label>
-              <select
-                value={yeniBolgeId}
-                onChange={(e) => setYeniBolgeId(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="">Seçin...</option>
-                {bolgeler.map((b) => <option key={b.id} value={b.id}>{b.ad}</option>)}
-              </select>
-            </div>
-          )}
+          {yeniRol === "bolge_muduru" && <BmBilgiNotu />}
           {showMagazaField(yeniRol) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -469,7 +486,7 @@ export default function KullanicilarPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Rol</label>
               <select
                 value={editRol}
-                onChange={(e) => { setEditRol(e.target.value as KullaniciRol); setEditBolgeId(""); setEditMagazaId(""); }}
+                onChange={(e) => { setEditRol(e.target.value as KullaniciRol); setEditMagazaId(""); }}
                 className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
               >
                 {ROLLER.map((r) => (
@@ -477,21 +494,7 @@ export default function KullanicilarPage() {
                 ))}
               </select>
             </div>
-            {showBolgeField(editRol) && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Bölge <span className="text-slate-400 font-normal">(isteğe bağlı)</span>
-                </label>
-                <select
-                  value={editBolgeId}
-                  onChange={(e) => setEditBolgeId(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  <option value="">Seçin...</option>
-                  {bolgeler.map((b) => <option key={b.id} value={b.id}>{b.ad}</option>)}
-                </select>
-              </div>
-            )}
+            {editRol === "bolge_muduru" && <BmBilgiNotu magazalar={editId ? bmMagazalari(editId) : []} />}
             {showMagazaField(editRol) && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">

@@ -37,28 +37,18 @@ export interface Kullanici<T = TimestampLike> {
   photoURL?: string;
   rol: KullaniciRol;
   magazaId?: string;
-  bolgeId?: string;
   aktif: boolean;
   olusturmaTarihi: T;
   guncellemeTarihi: T;
   lastLoginAt?: T;
 }
 
-export interface Bolge<T = TimestampLike> {
-  id: string;
-  ad: string;
-  aciklama?: string;
-  bolgeMuduruId?: string;
-  aktif: boolean;
-  olusturmaTarihi: T;
-  guncellemeTarihi: T;
-}
-
 export interface Magaza<T = TimestampLike> {
   id: string;
   ad: string;
   adres?: string;
-  bolgeId?: string;
+  /** Sorumlu bölge müdürü (users.id, rol bolge_muduru); null = atanmamış. */
+  bolgeMuduruId?: string | null;
   magazaSorumlusuId?: string;
   aktif: boolean;
   olusturmaTarihi: T;

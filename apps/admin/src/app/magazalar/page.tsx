@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Store, Pencil, Trash2, Search, Plus, CheckCircle2, XCircle, MapPin } from "lucide-react";
+import { Store, Pencil, Trash2, Search, Plus, CheckCircle2, XCircle, MapPin, UserCog } from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
@@ -12,18 +12,16 @@ import {
   getMagaza,
   updateMagaza,
   deleteMagaza,
-  getBolgeler,
   getKullanicilar,
 } from "@/lib/firestore";
-import type { Magaza, Bolge, Kullanici } from "@/types";
+import type { Magaza, Kullanici } from "@/types";
 
 export default function MagazalarPage() {
   const [magazalar, setMagazalar] = useState<Magaza[]>([]);
-  const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
   const [loading, setLoading] = useState(true);
   const [ara, setAra] = useState("");
-  const [bolgeFiltre, setBolgeFiltre] = useState("");
+  const [mudurFiltre, setMudurFiltre] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -31,7 +29,7 @@ export default function MagazalarPage() {
   const [yeniAcik, setYeniAcik] = useState(false);
   const [yeniAd, setYeniAd] = useState("");
   const [yeniAdres, setYeniAdres] = useState("");
-  const [yeniBolgeId, setYeniBolgeId] = useState("");
+  const [yeniMudurId, setYeniMudurId] = useState("");
   const [yeniSorumluId, setYeniSorumluId] = useState("");
   const [yeniSaving, setYeniSaving] = useState(false);
   const [yeniError, setYeniError] = useState("");
@@ -40,7 +38,7 @@ export default function MagazalarPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editAd, setEditAd] = useState("");
   const [editAdres, setEditAdres] = useState("");
-  const [editBolgeId, setEditBolgeId] = useState("");
+  const [editMudurId, setEditMudurId] = useState("");
   const [editSorumluId, setEditSorumluId] = useState("");
   const [editAktif, setEditAktif] = useState(true);
   const [editLoading, setEditLoading] = useState(false);
@@ -50,19 +48,20 @@ export default function MagazalarPage() {
   const sorumluAdaylar = kullanicilar.filter(
     (k) => k.rol === "magaza_sorumlusu" || k.rol === "admin"
   );
+  // Bölge müdürü ataması: rolü bolge_muduru olan aktif kullanıcılar (ad büyük harfle saklanır)
+  const mudurAdaylar = kullanicilar.filter((k) => k.rol === "bolge_muduru" && k.aktif !== false);
 
   async function load() {
     setLoading(true);
-    const [m, b, k] = await Promise.all([getMagazalar(), getBolgeler(), getKullanicilar()]);
+    const [m, k] = await Promise.all([getMagazalar(), getKullanicilar()]);
     setMagazalar(m);
-    setBolgeler(b);
     setKullanicilar(k);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
   function openYeni() {
-    setYeniAd(""); setYeniAdres(""); setYeniBolgeId(""); setYeniSorumluId(""); setYeniError("");
+    setYeniAd(""); setYeniAdres(""); setYeniMudurId(""); setYeniSorumluId(""); setYeniError("");
     setYeniAcik(true);
   }
 
@@ -73,7 +72,7 @@ export default function MagazalarPage() {
     await createMagaza({
       ad: yeniAd.trim(),
       adres: yeniAdres.trim() || undefined,
-      bolgeId: yeniBolgeId || undefined,
+      bolgeMuduruId: yeniMudurId || null,
       magazaSorumlusuId: yeniSorumluId || undefined,
     });
     setYeniSaving(false);
@@ -89,7 +88,7 @@ export default function MagazalarPage() {
     if (m) {
       setEditAd(m.ad);
       setEditAdres(m.adres ?? "");
-      setEditBolgeId(m.bolgeId ?? "");
+      setEditMudurId(m.bolgeMuduruId ?? "");
       setEditSorumluId(m.magazaSorumlusuId ?? "");
       setEditAktif(m.aktif);
     }
@@ -103,7 +102,7 @@ export default function MagazalarPage() {
     await updateMagaza(editId, {
       ad: editAd.trim(),
       adres: editAdres.trim() || undefined,
-      bolgeId: editBolgeId || undefined,
+      bolgeMuduruId: editMudurId || null,
       magazaSorumlusuId: editSorumluId || undefined,
       aktif: editAktif,
     });
@@ -125,13 +124,13 @@ export default function MagazalarPage() {
     const araEslesen =
       m.ad.toLowerCase().includes(ara.toLowerCase()) ||
       (m.adres ?? "").toLowerCase().includes(ara.toLowerCase());
-    const bolgeEslesen = !bolgeFiltre || m.bolgeId === bolgeFiltre;
-    return araEslesen && bolgeEslesen;
+    const mudurEslesen = !mudurFiltre || (mudurFiltre === "__yok" ? !m.bolgeMuduruId : m.bolgeMuduruId === mudurFiltre);
+    return araEslesen && mudurEslesen;
   });
 
-  function bolgeAdi(id?: string) {
+  function mudurAdi(id?: string | null) {
     if (!id) return null;
-    return bolgeler.find((b) => b.id === id)?.ad ?? null;
+    return kullanicilar.find((k) => k.id === id)?.displayName ?? null;
   }
 
   function sorumluAdi(id?: string) {
@@ -193,16 +192,17 @@ export default function MagazalarPage() {
             />
           </div>
           <select
-            value={bolgeFiltre}
-            onChange={(e) => setBolgeFiltre(e.target.value)}
+            value={mudurFiltre}
+            onChange={(e) => setMudurFiltre(e.target.value)}
             className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50"
           >
-            <option value="">Tüm Bölgeler</option>
-            {bolgeler.map((b) => (
-              <option key={b.id} value={b.id}>{b.ad}</option>
+            <option value="">Tüm Bölge Müdürleri</option>
+            <option value="__yok">Atanmamış</option>
+            {mudurAdaylar.map((k) => (
+              <option key={k.id} value={k.id}>{k.displayName}</option>
             ))}
           </select>
-          {(ara || bolgeFiltre) && (
+          {(ara || mudurFiltre) && (
             <span className="text-xs text-slate-400">{filtrelenmis.length} sonuç</span>
           )}
         </div>
@@ -214,8 +214,8 @@ export default function MagazalarPage() {
         ) : filtrelenmis.length === 0 ? (
           <EmptyState
             icon={Store}
-            title={ara || bolgeFiltre ? "Eşleşen mağaza bulunamadı" : "Henüz mağaza yok"}
-            description={ara || bolgeFiltre ? "Filtrelerinizi değiştirin." : "İlk mağazayı eklemek için sağ üstteki butona tıklayın."}
+            title={ara || mudurFiltre ? "Eşleşen mağaza bulunamadı" : "Henüz mağaza yok"}
+            description={ara || mudurFiltre ? "Filtrelerinizi değiştirin." : "İlk mağazayı eklemek için sağ üstteki butona tıklayın."}
           />
         ) : (
           <table className="w-full">
@@ -224,7 +224,7 @@ export default function MagazalarPage() {
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-10">#</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mağaza</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Adres</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bölge</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Bölge Müdürü</th>
                 <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Sorumlu</th>
                 <th className="px-4 py-3 text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">Durum</th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-24">İşlemler</th>
@@ -253,7 +253,13 @@ export default function MagazalarPage() {
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-600">
-                    {bolgeAdi(magaza.bolgeId) ?? <span className="text-slate-300">—</span>}
+                    {mudurAdi(magaza.bolgeMuduruId) ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-medium">
+                        <UserCog size={11} /> {mudurAdi(magaza.bolgeMuduruId)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-600">
                     {magaza.magazaSorumlusuId ? (
@@ -328,11 +334,11 @@ export default function MagazalarPage() {
             />
           </div>
           <SelectField
-            label="Bölge (isteğe bağlı)"
-            value={yeniBolgeId}
-            onChange={setYeniBolgeId}
-            options={bolgeler.map((b) => ({ value: b.id, label: b.ad }))}
-            placeholder="Seçin..."
+            label="Bölge Müdürü (isteğe bağlı)"
+            value={yeniMudurId}
+            onChange={setYeniMudurId}
+            options={mudurAdaylar.map((k) => ({ value: k.id, label: k.displayName }))}
+            placeholder="Atanmamış"
           />
           <SelectField
             label="Mağaza Sorumlusu (isteğe bağlı)"
@@ -381,11 +387,11 @@ export default function MagazalarPage() {
               />
             </div>
             <SelectField
-              label="Bölge (isteğe bağlı)"
-              value={editBolgeId}
-              onChange={setEditBolgeId}
-              options={bolgeler.map((b) => ({ value: b.id, label: b.ad }))}
-              placeholder="Seçin..."
+              label="Bölge Müdürü (isteğe bağlı)"
+              value={editMudurId}
+              onChange={setEditMudurId}
+              options={mudurAdaylar.map((k) => ({ value: k.id, label: k.displayName }))}
+              placeholder="Atanmamış"
             />
             <SelectField
               label="Mağaza Sorumlusu (isteğe bağlı)"

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { TrendingUp, CalendarDays, Store, Search, Users, UserPlus, UserMinus, Play, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Star, AlertTriangle, Repeat } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getBolgeler, updateKullaniciFavoriMagazalar, getBekleyenTekrarIzlemeler } from "@/lib/firestore";
+import { getDegerlendirmeler, getDegerlendirmelerByAyYil, getMagazalar, getAktifPersoneller, updatePersonel, getFormlar, getAcikDegerlendirmeler, getKullanicilar, updateKullaniciFavoriMagazalar, getBekleyenTekrarIzlemeler } from "@/lib/firestore";
 import Modal from "@/components/ui/Modal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import StatKart from "@/components/ui/StatKart";
 import Badge from "@/components/ui/Badge";
 import { oncekiAyDonemi } from "@/lib/puan";
-import type { Degerlendirme, Magaza, Personel, Form, Bolge, CevapSecenegi } from "@/types";
+import type { Degerlendirme, Magaza, Personel, Form, Kullanici, CevapSecenegi } from "@/types";
 
 interface KameramanStats {
   buAyDeg: number;
@@ -30,7 +30,7 @@ export default function KameramanPaneliPage() {
   const [personellerMap, setPersonellerMap] = useState<Record<string, Personel[]>>({});
   const [tumAktifPersoneller, setTumAktifPersoneller] = useState<Personel[]>([]);
   const [formlar, setFormlar] = useState<Form[]>([]);
-  const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
+  const [bolgeMudurleri, setBolgeMudurleri] = useState<Kullanici[]>([]);
   // Bu ay, herhangi bir kameraman tarafından oluşturulmuş tüm raporlar — havuzda
   // bir personelin başka mağazada da bulunup bulunmadığını göstermek için.
   const [buAyTumRaporlar, setBuAyTumRaporlar] = useState<Degerlendirme[]>([]);
@@ -88,12 +88,13 @@ export default function KameramanPaneliPage() {
       try {
         const now0 = new Date();
         const oncekiDonem = oncekiAyDonemi(now0);
-        const [f, activeP, allM, list, allBolgeler, ayRaporlari, bekleyenTakipler] = await Promise.all([
+        const [f, activeP, allM, list, tumKullanicilar, ayRaporlari, bekleyenTakipler] = await Promise.all([
           getFormlar(),
           getAktifPersoneller(),
           getMagazalar(),
           getDegerlendirmeler({ kameramanId: user!.uid }),
-          getBolgeler(),
+          // Bölge müdürü adları için; users okunamazsa (kural) sütun boş kalır
+          getKullanicilar().catch(() => [] as Kullanici[]),
           getDegerlendirmelerByAyYil(now0.getMonth(), now0.getFullYear()),
           // Havuz okunamazsa (ör. kural eksik) panel yine açılsın
           getBekleyenTekrarIzlemeler().catch((err) => { console.error("Tekrar izlemeler okunamadı:", err); return []; }),
@@ -102,7 +103,7 @@ export default function KameramanPaneliPage() {
         setFormlar(f);
         setTumAktifPersoneller(activeP);
         setDegerlendirmeler(list);
-        setBolgeler(allBolgeler);
+        setBolgeMudurleri(tumKullanicilar.filter((k) => k.rol === "bolge_muduru"));
         setBuAyTumRaporlar(ayRaporlari);
         setFavoriMagazaIdleri(kullanici?.favoriMagazaIdleri || []);
 
@@ -222,25 +223,27 @@ export default function KameramanPaneliPage() {
     window.open(`/degerlendirmeler/yeni?magazaId=${activeMagaza.id}&personelId=${raporModalPersonel.id}&formId=${formId}`, "_blank");
   };
 
-  // Mağaza → Bölge Müdürü çözümlemesi: bu organizasyonda her "Bölge" kaydı,
-  // bölge müdürünün adıyla oluşturulmuş (örn. "ERMAN CELEP" adlı bir bölge) —
-  // yani Bölge.ad, doğrudan bölge müdürünün adıdır.
-  const bolgeAdMap = useMemo(() => Object.fromEntries(bolgeler.map((b) => [b.id, b.ad])), [bolgeler]);
+  // Mağaza → Bölge Müdürü çözümlemesi: magazalar.bolgeMuduruId → users.displayName
+  // (bölge müdürü adı Kullanıcılar sayfasında büyük harfle saklanır).
+  const bolgeMuduruAdMap = useMemo(
+    () => Object.fromEntries(bolgeMudurleri.map((k) => [k.id, k.displayName])),
+    [bolgeMudurleri]
+  );
 
   function getBolgeMuduruAdi(magaza: Magaza): string | null {
-    if (!magaza.bolgeId) return null;
-    return bolgeAdMap[magaza.bolgeId] ?? null;
+    if (!magaza.bolgeMuduruId) return null;
+    return bolgeMuduruAdMap[magaza.bolgeMuduruId] ?? null;
   }
 
   const bolgeMuduruSecenekleri = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of magazalar) {
-      if (!m.bolgeId) continue;
-      const ad = bolgeAdMap[m.bolgeId];
-      if (ad) map.set(m.bolgeId, ad);
+      if (!m.bolgeMuduruId) continue;
+      const ad = bolgeMuduruAdMap[m.bolgeMuduruId];
+      if (ad) map.set(m.bolgeMuduruId, ad);
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "tr"));
-  }, [magazalar, bolgeAdMap]);
+  }, [magazalar, bolgeMuduruAdMap]);
 
   const toplamPersonelSayisi = useMemo(() => {
     const ids = new Set<string>();
@@ -321,7 +324,7 @@ export default function KameramanPaneliPage() {
     const q = magazaSearchQuery.trim().toLowerCase();
     return goruntulenecekMagazalar.filter((m) => {
       if (q && !m.ad.toLowerCase().includes(q) && !(m.adres ?? "").toLowerCase().includes(q)) return false;
-      if (filtreBolgeMuduru && m.bolgeId !== filtreBolgeMuduru) return false;
+      if (filtreBolgeMuduru && m.bolgeMuduruId !== filtreBolgeMuduru) return false;
       return true;
     });
   }, [goruntulenecekMagazalar, magazaSearchQuery, filtreBolgeMuduru]);

@@ -24,16 +24,7 @@ export interface Kullanici {
   rol: KullaniciRol;
   magazaId?: string;
   magazaIdleri?: string[];
-  bolgeId?: string;
   favoriMagazaIdleri?: string[];
-  aktif: boolean;
-}
-
-export interface Bolge {
-  id: string;
-  ad: string;
-  aciklama?: string;
-  bolgeMuduruId?: string;
   aktif: boolean;
 }
 
@@ -41,7 +32,8 @@ export interface Magaza {
   id: string;
   ad: string;
   adres?: string;
-  bolgeId?: string;
+  /** Sorumlu bölge müdürü (users.id, rol bolge_muduru); null = atanmamış. */
+  bolgeMuduruId?: string | null;
   aktif: boolean;
 }
 

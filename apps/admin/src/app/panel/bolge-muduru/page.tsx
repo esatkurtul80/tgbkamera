@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapIcon, Store, Users, ClipboardList, TrendingUp, Eye, FileText, Percent } from "lucide-react";
 import Link from "next/link";
 import { getDegerlendirmelerByMagazaIds } from "@/lib/firestore";
-import { useBmBolge } from "@/hooks/useBmBolge";
+import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import { bolgeOzetHesapla, type BolgeOzet, type MagazaOzet, type PersonelOzet, type FormOzet } from "@/lib/bolgeOzet";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import Badge from "@/components/ui/Badge";
@@ -38,7 +38,7 @@ function YuzdePill({ yuzde }: { yuzde: number | null }) {
 }
 
 export default function BolgeMuduruPaneliPage() {
-  const { bolge, magazalar, loading: bolgeLoading, bolgeYok } = useBmBolge();
+  const { magazalar, loading: bolgeLoading, magazaYok: bolgeYok } = useBmMagazalar();
   const [raporlar, setRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
   const [formSekme, setFormSekme] = useState<"puanli" | "puansiz">("puanli");
@@ -307,7 +307,7 @@ export default function BolgeMuduruPaneliPage() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <MapIcon size={32} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Hesabınıza bölge atanmamış.</p>
+          <p className="text-sm text-slate-500">Hesabınıza mağaza atanmamış.</p>
           <p className="text-xs text-slate-400 mt-1">Lütfen yöneticinizle iletişime geçin.</p>
         </div>
       </div>
@@ -322,7 +322,7 @@ export default function BolgeMuduruPaneliPage() {
       <div>
         <div className="flex items-center gap-2 mb-0.5">
           <MapIcon size={18} className="text-blue-600" />
-          <h1 className="text-xl font-bold text-slate-900">{bolge?.ad ?? "Bölge Paneli"}</h1>
+          <h1 className="text-xl font-bold text-slate-900">Bölge Paneli</h1>
         </div>
         <p className="text-sm text-slate-500">
           {new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}

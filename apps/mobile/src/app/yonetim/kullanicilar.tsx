@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
-import { getKullanicilar, getMagazalar, getBolgeler, updateKullanici } from '@/lib/firestore';
+import { getKullanicilar, getMagazalar, updateKullanici } from '@/lib/firestore';
 import { TekSecim, CokluSecim, AnahtarSatir, FormSayfasi } from '@/components/yonetim';
-import type { Kullanici, KullaniciRol, Magaza, Bolge } from '@/lib/types';
+import type { Kullanici, KullaniciRol, Magaza } from '@/lib/types';
 
 const ROLLER: { id: KullaniciRol; ad: string }[] = [
   { id: 'admin', ad: 'Admin' },
@@ -16,24 +16,22 @@ const ROLLER: { id: KullaniciRol; ad: string }[] = [
 const rolAdi = (r: KullaniciRol) => ROLLER.find((x) => x.id === r)?.ad ?? r;
 
 /** Kullanıcılar yönetimi — webdeki /kullanicilar sayfasının natif karşılığı:
- *  rol atama, aktiflik ve role göre mağaza/bölge atamaları. */
+ *  rol atama, aktiflik ve role göre mağaza atamaları (bölge müdürü mağazaları web Mağazalar sayfasından atanır). */
 export default function KullanicilarScreen() {
   const [kullanicilar, setKullanicilar] = useState<Kullanici[]>([]);
   const [magazalar, setMagazalar] = useState<Magaza[]>([]);
-  const [bolgeler, setBolgeler] = useState<Bolge[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{
     id: string; displayName: string; email: string; rol: KullaniciRol;
-    magazaIdleri: string[]; magazaId?: string; bolgeId?: string; aktif: boolean;
+    magazaIdleri: string[]; magazaId?: string; aktif: boolean;
   } | null>(null);
   const [kaydediyor, setKaydediyor] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [k, m, b] = await Promise.all([getKullanicilar(), getMagazalar(), getBolgeler()]);
+      const [k, m] = await Promise.all([getKullanicilar(), getMagazalar()]);
       setKullanicilar(k);
       setMagazalar(m);
-      setBolgeler(b);
     } finally {
       setLoading(false);
     }
@@ -49,7 +47,6 @@ export default function KullanicilarScreen() {
         aktif: form.aktif,
         magazaIdleri: form.rol === 'kameraman' ? form.magazaIdleri : null,
         magazaId: form.rol === 'magaza_sorumlusu' ? (form.magazaId ?? null) : null,
-        bolgeId: form.rol === 'bolge_muduru' ? (form.bolgeId ?? null) : null,
       });
       setForm(null);
       await load();
@@ -77,7 +74,7 @@ export default function KullanicilarScreen() {
               onPress={() =>
                 setForm({
                   id: item.id, displayName: item.displayName, email: item.email, rol: item.rol,
-                  magazaIdleri: item.magazaIdleri ?? [], magazaId: item.magazaId, bolgeId: item.bolgeId,
+                  magazaIdleri: item.magazaIdleri ?? [], magazaId: item.magazaId,
                   aktif: item.aktif !== false,
                 })
               }
@@ -108,12 +105,17 @@ export default function KullanicilarScreen() {
               />
             )}
             {form.rol === 'bolge_muduru' && (
-              <TekSecim
-                etiket="Bölge"
-                deger={form.bolgeId}
-                secenekler={bolgeler.map((b) => ({ id: b.id, ad: b.ad }))}
-                onSelect={(id) => setForm({ ...form, bolgeId: id })}
-              />
+              <View style={st.bmNot}>
+                <Text style={st.bmNotText}>
+                  Mağaza ataması web panelindeki Mağazalar sayfasından yapılır.
+                  {(() => {
+                    const atanan = magazalar.filter((m) => m.bolgeMuduruId === form.id);
+                    return atanan.length > 0
+                      ? ` Atanmış: ${atanan.map((m) => m.ad).join(', ')}`
+                      : ' Henüz mağaza atanmamış.';
+                  })()}
+                </Text>
+              </View>
             )}
             {form.rol === 'magaza_sorumlusu' && (
               <TekSecim
@@ -132,6 +134,8 @@ export default function KullanicilarScreen() {
 }
 
 const st = StyleSheet.create({
+  bmNot: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 8 },
+  bmNotText: { fontSize: 12.5, color: '#1e40af', lineHeight: 18 },
   container: { flex: 1, backgroundColor: '#f8fafc' },
   satir: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',

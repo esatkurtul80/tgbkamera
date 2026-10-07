@@ -37,7 +37,6 @@ const adminMenu: MenuBolum[] = [
   {
     etiket: 'YAPI',
     ogeler: [
-      { ad: 'Bölgeler', ikon: '🗺️', native: '/yonetim/bolgeler' },
       { ad: 'Mağazalar', ikon: '🏬', native: '/magazalar' },
       { ad: 'Personel', ikon: '👥', native: '/yonetim/personel' },
     ],

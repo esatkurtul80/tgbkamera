@@ -19,7 +19,7 @@ import {
   getAcikDegerlendirmeler,
   updatePersonel,
 } from '@/lib/firestore';
-import { useBmBolge } from '@/hooks/useBmBolge';
+import { useBmMagazalar } from '@/hooks/useBmMagazalar';
 import ErisimYok from '@/components/erisim-yok';
 import type { Personel, Form, Degerlendirme } from '@/lib/types';
 
@@ -40,7 +40,7 @@ export default function MagazaDetayScreen() {
   // Bölge müdürü salt okunur: rapor başlatamaz, personel ekleyip çıkaramaz;
   // yalnız kendi bölgesindeki mağazayı açabilir (hook diğer rollerde sorgu çalıştırmaz)
   const saltOkunur = kullanici?.rol === 'bolge_muduru';
-  const { magazaIdSet: bmMagazalar, loading: bmYukleniyor } = useBmBolge();
+  const { magazaIdSet: bmMagazalar, loading: bmYukleniyor } = useBmMagazalar();
 
   const [personeller, setPersoneller] = useState<Personel[]>([]);
   const [formlar, setFormlar] = useState<Form[]>([]);

@@ -6,7 +6,7 @@ import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import DataTable, { type DataColumn } from "@/components/ui/DataTable";
 import { getDegerlendirmelerByMagazaIds } from "@/lib/firestore";
-import { useBmBolge } from "@/hooks/useBmBolge";
+import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import type { Degerlendirme } from "@/types";
 
 /**
@@ -16,7 +16,7 @@ import type { Degerlendirme } from "@/types";
  * admin görünümündeki desenle eklenebilir.)
  */
 export default function BolgeMuduruDegerlendirmelerView() {
-  const { bolge, magazalar, loading: bolgeLoading, bolgeYok } = useBmBolge();
+  const { magazalar, loading: bolgeLoading, magazaYok: bolgeYok } = useBmMagazalar();
   const [liste, setListe] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -214,7 +214,7 @@ export default function BolgeMuduruDegerlendirmelerView() {
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <MapIcon size={32} className="text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Hesabınıza bölge atanmamış.</p>
+          <p className="text-sm text-slate-500">Hesabınıza mağaza atanmamış.</p>
           <p className="text-xs text-slate-400 mt-1">Lütfen yöneticinizle iletişime geçin.</p>
         </div>
       </div>
@@ -227,7 +227,7 @@ export default function BolgeMuduruDegerlendirmelerView() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Bölge Değerlendirmeleri</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {bolge?.ad ? `${bolge.ad} · ` : ""}{filtrelenmis.length} rapor
+            {magazalar.length} mağaza · {filtrelenmis.length} rapor
           </p>
         </div>
         {acikSayisi > 0 && (

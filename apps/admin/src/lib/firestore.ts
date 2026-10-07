@@ -31,7 +31,6 @@ import type {
   Degerlendirme,
   SoruIzlenme,
   Kullanici,
-  Bolge,
   Magaza,
   CopKutusuKaydi,
   KullaniciRol,
@@ -95,7 +94,6 @@ export async function updateKullanici(
     rol?: KullaniciRol;
     magazaId?: string | null;
     magazaIdleri?: string[] | null;
-    bolgeId?: string | null;
     aktif?: boolean;
   }
 ): Promise<void> {
@@ -121,7 +119,6 @@ export async function createKullanici(data: {
   rol: KullaniciRol;
   magazaId?: string;
   magazaIdleri?: string[];
-  bolgeId?: string;
 }): Promise<string> {
   const ref = await addDoc(collection(db, "users"), {
     ...cleanData(data),
@@ -132,44 +129,6 @@ export async function createKullanici(data: {
   return ref.id;
 }
 
-// ─── Bölgeler ─────────────────────────────────────────────────────────────────
-
-export async function getBolgeler(): Promise<Bolge[]> {
-  const snap = await getDocs(query(collection(db, "bolgeler"), orderBy("ad", "asc")));
-  return snap.docs.map((d) => toDoc<Bolge>(d));
-}
-
-export async function getBolge(id: string): Promise<Bolge | null> {
-  const snap = await getDoc(doc(db, "bolgeler", id));
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Bolge) : null;
-}
-
-export async function createBolge(data: {
-  ad: string;
-  aciklama?: string;
-  bolgeMuduruId?: string;
-}): Promise<string> {
-  const customId = generateCustomId(data.ad);
-  await setDoc(doc(db, "bolgeler", customId), {
-    ...cleanData(data),
-    aktif: true,
-    olusturmaTarihi: serverTimestamp(),
-    guncellemeTarihi: serverTimestamp(),
-  });
-  return customId;
-}
-
-export async function updateBolge(
-  id: string,
-  data: { ad: string; aciklama?: string; bolgeMuduruId?: string; aktif: boolean }
-): Promise<void> {
-  await updateDoc(doc(db, "bolgeler", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
-}
-
-export async function deleteBolge(id: string): Promise<void> {
-  await deleteDoc(doc(db, "bolgeler", id));
-}
-
 // ─── Mağazalar ─────────────────────────────────────────────────────────────────
 
 export async function getMagazalar(): Promise<Magaza[]> {
@@ -177,11 +136,17 @@ export async function getMagazalar(): Promise<Magaza[]> {
   return snap.docs.map((d) => toDoc<Magaza>(d));
 }
 
-export async function getMagazalarByBolge(bolgeId: string): Promise<Magaza[]> {
+/**
+ * Bölge müdürünün sorumlu olduğu mağazalar (magazalar.bolgeMuduruId === uid).
+ * Sıralama bellekte yapılır; where + orderBy için kompozit indeks gerekmez.
+ */
+export async function getMagazalarByBolgeMuduru(uid: string): Promise<Magaza[]> {
   const snap = await getDocs(
-    query(collection(db, "magazalar"), where("bolgeId", "==", bolgeId), orderBy("ad", "asc"))
+    query(collection(db, "magazalar"), where("bolgeMuduruId", "==", uid))
   );
-  return snap.docs.map((d) => toDoc<Magaza>(d));
+  return snap.docs
+    .map((d) => toDoc<Magaza>(d))
+    .sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
 }
 
 export async function getMagaza(id: string): Promise<Magaza | null> {
@@ -192,7 +157,7 @@ export async function getMagaza(id: string): Promise<Magaza | null> {
 export async function createMagaza(data: {
   ad: string;
   adres?: string;
-  bolgeId?: string;
+  bolgeMuduruId?: string | null;
   magazaSorumlusuId?: string;
 }): Promise<string> {
   const customId = generateCustomId(data.ad);
@@ -207,7 +172,8 @@ export async function createMagaza(data: {
 
 export async function updateMagaza(
   id: string,
-  data: { ad: string; adres?: string; bolgeId?: string; magazaSorumlusuId?: string; aktif: boolean }
+  /** bolgeMuduruId: null verilirse atama kaldırılır (undefined → alan dokunulmaz, cleanData atar). */
+  data: { ad: string; adres?: string; bolgeMuduruId?: string | null; magazaSorumlusuId?: string; aktif: boolean }
 ): Promise<void> {
   await updateDoc(doc(db, "magazalar", id), { ...cleanData(data), guncellemeTarihi: serverTimestamp() });
 }
@@ -530,14 +496,6 @@ export async function getDegerlendirmelerByMagazaIds(
   const hepsi = snaplar.flatMap((s) => s.docs.map((d) => toDoc<Degerlendirme>(d)));
   hepsi.sort((a, b) => (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0));
   return hepsi;
-}
-
-/** users.bolgeId atanmadıysa yedek bölge çözümü: bolgeMuduruId === uid olan bölge. */
-export async function getBolgeByMuduruId(uid: string): Promise<Bolge | null> {
-  const snap = await getDocs(
-    query(collection(db, "bolgeler"), where("bolgeMuduruId", "==", uid), limit(1))
-  );
-  return snap.empty ? null : toDoc<Bolge>(snap.docs[0]);
 }
 
 /** Belirli bir ay/yıl için (tüm kameramanlar, tüm mağazalar) tüm raporları döner. */

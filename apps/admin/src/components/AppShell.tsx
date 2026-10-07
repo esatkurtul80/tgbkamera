@@ -21,7 +21,7 @@ const ROLE_HOMES: Record<KullaniciRol, string> = {
 const ADMIN_ROLES: KullaniciRol[] = ["admin", "sirketsahibi", "ust_yonetici"];
 
 const ADMIN_ONLY_PREFIXES = [
-  "/bolgeler", "/magazalar", "/kullanicilar",
+  "/magazalar", "/kullanicilar",
   "/formlar", "/bolumler", "/sorular",
 ];
 
@@ -32,9 +32,9 @@ const BM_DENY_PREFIXES = [
   "/tum-degerlendirmeler", "/rapor-tasarimi", "/degerlendirmeler/yeni",
 ];
 
-// Puan Paneli ve tekrar izleme havuzu: mağazalar arası personel puanlarını gösterir ve
-// kameraman iş akışıdır — bölge müdürü ile mağaza sorumlusuna kapalı.
-const PUAN_PANELI_PREFIXES = ["/puan-paneli", "/tekrar-izlemeler", "/zayif-personel-raporlari"];
+// Puan Paneli, tekrar izleme havuzu ve Raporlamalar: mağazalar arası personel puanlarını
+// gösterir ve kameraman iş akışıdır — bölge müdürü ile mağaza sorumlusuna kapalı.
+const PUAN_PANELI_PREFIXES = ["/puan-paneli", "/tekrar-izlemeler", "/zayif-personel-raporlari", "/raporlamalar"];
 
 function bmYasakMi(pathname: string): boolean {
   return (

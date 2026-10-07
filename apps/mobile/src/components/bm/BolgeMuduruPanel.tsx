@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBmBolge } from '@/hooks/useBmBolge';
+import { useBmMagazalar } from '@/hooks/useBmMagazalar';
 import { getDegerlendirmelerByMagazaIds } from '@/lib/firestore';
 import { bolgeOzetHesapla, type BolgeOzet } from '@/lib/bolgeOzet';
 import type { Degerlendirme } from '@/lib/types';
@@ -59,7 +59,7 @@ function YuzdePill({ yuzde }: { yuzde: number | null }) {
 export default function BolgeMuduruPanel() {
   const router = useRouter();
   const { kullanici } = useAuth();
-  const { bolge, magazalar, loading: bolgeLoading, bolgeYok } = useBmBolge();
+  const { magazalar, loading: bolgeLoading, magazaYok: bolgeYok } = useBmMagazalar();
   const [raporlar, setRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,7 +87,7 @@ export default function BolgeMuduruPanel() {
     return (
       <View style={st.center}>
         <Text style={{ fontSize: 40, marginBottom: 12 }}>🗺️</Text>
-        <Text style={st.bosBaslik}>Hesabınıza bölge atanmamış</Text>
+        <Text style={st.bosBaslik}>Hesabınıza mağaza atanmamış</Text>
         <Text style={st.bosAlt}>Lütfen yöneticinizle iletişime geçin.</Text>
       </View>
     );
@@ -121,7 +121,7 @@ export default function BolgeMuduruPanel() {
       </View>
 
       {/* Bölge adı başlık */}
-      <Text style={st.baslik}>{bolge?.ad ?? 'Bölgem'}</Text>
+      <Text style={st.baslik}>Bölgem · {magazalar.length} mağaza</Text>
       {ozet.acikRapor > 0 && (
         <Text style={st.acikNot}>{ozet.acikRapor} devam eden rapor (istatistiklere dahil değil)</Text>
       )}

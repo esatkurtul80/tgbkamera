@@ -1,6 +1,7 @@
 import { Workbook } from "exceljs";
 import { soruPuanHesapla } from "@/lib/skorlama";
 import type { Degerlendirme } from "@/types";
+import type { PuanGecmisi, PuanRaporlamaSatiri } from "@/lib/puanRaporlama";
 
 const CEVAP_STIL: Record<string, { renk: string; label: string }> = {
   evet: { renk: "FF10B981", label: "EVET" },
@@ -263,4 +264,91 @@ export async function degerlendirmeListesiExcelIndir(liste: Degerlendirme[]): Pr
 
   const tarihEtiketi = new Date().toLocaleDateString("tr-TR").replace(/\./g, "-");
   await workbookIndir(wb, `Degerlendirmeler_${liste.length}kayit_${tarihEtiketi}.xlsx`);
+}
+
+// ─── Puan Raporlamaları ───────────────────────────────────────────────────────
+
+
+function baslikSatiriBicimle(ws: import("exceljs").Worksheet, basliklar: string[]): void {
+  const headerRow = ws.addRow(basliklar);
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF312E81" } };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+  });
+}
+
+function puanHucresiBoya(cell: import("exceljs").Cell, puan: number): void {
+  cell.alignment = { horizontal: "center" };
+  cell.font = {
+    bold: true,
+    color: { argb: puan <= 70 ? "FFBE123C" : puan <= 80 ? "FFB45309" : "FF047857" },
+  };
+}
+
+/**
+ * Puan Raporlamaları tablosunu (filtrelenmiş satırlar) tek sayfalı Excel olarak indirir:
+ * personel başına bölge müdürü, mağaza, toplam rapor sayısı ve ortalama puan.
+ * Kameraman adı yazılmaz; puanlı/yorumlu ayrımı verilmez.
+ */
+export async function puanRaporlamaExcelIndir(satirlar: PuanRaporlamaSatiri[], aralikEtiketi: string): Promise<void> {
+  const wb = new Workbook();
+  wb.creator = "TGB Kamera";
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet("Puan Raporlaması");
+  baslikSatiriBicimle(ws, ["Bölge Müdürü", "Mağaza", "Personel", "Rapor Sayısı", "Ortalama Puan"]);
+  for (const s of satirlar) {
+    const row = ws.addRow([
+      s.bolgeMudurAdlari.join(", ") || "—",
+      s.magazaAdlari.join(", ") || "—",
+      s.personelAd,
+      s.raporSayisi,
+      s.ortalamaPuan,
+    ]);
+    row.getCell(4).alignment = { horizontal: "center" };
+    puanHucresiBoya(row.getCell(5), s.ortalamaPuan);
+  }
+  ws.columns.forEach((col, i) => { col.width = [22, 26, 26, 14, 14][i] ?? 16; });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.autoFilter = { from: "A1", to: "E1" };
+
+  await workbookIndir(wb, `Puan_Raporlamalari_${dosyaAdiTemizle(aralikEtiketi).replace(/\s+/g, "_")}.xlsx`);
+}
+
+/** Tek personelin tüm puan geçmişini (takip raporları işaretli) Excel olarak indirir. */
+export async function puanGecmisiExcelIndir(personelAd: string, gecmis: PuanGecmisi): Promise<void> {
+  const wb = new Workbook();
+  wb.creator = "TGB Kamera";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Puan Geçmişi");
+
+  ws.addRow([`${personelAd} — Puan Geçmişi`]).font = { bold: true, size: 13 };
+  ws.addRow([
+    `Genel ortalama: ${gecmis.ortalama ?? "—"} · ${gecmis.raporSayisi} puanlı rapor` +
+    (gecmis.takipSayisi > 0 ? ` · ${gecmis.takipSayisi} takip raporu (ortalamaya girmez)` : ""),
+  ]).font = { color: { argb: "FF64748B" } };
+  ws.addRow([]);
+  baslikSatiriBicimle(ws, ["Dönem", "Tarih", "Form", "Mağaza", "Takip", "Puan"]);
+
+  for (const g of gecmis.aylar) {
+    for (const k of g.kayitlar) {
+      const row = ws.addRow([
+        `${AYLAR[g.ay]} ${g.yil}`,
+        k.tarih.toLocaleDateString("tr-TR"),
+        k.formAd,
+        k.magazaAd,
+        k.takip ? "Evet" : "",
+        k.puan,
+      ]);
+      row.getCell(2).alignment = { horizontal: "center" };
+      row.getCell(5).alignment = { horizontal: "center" };
+      if (k.takip) row.getCell(5).font = { bold: true, color: { argb: "FFC2410C" } };
+      puanHucresiBoya(row.getCell(6), k.puan);
+    }
+  }
+  ws.columns.forEach((col, i) => { col.width = [14, 12, 30, 22, 8, 8][i] ?? 16; });
+  ws.views = [{ state: "frozen", ySplit: 4 }];
+
+  await workbookIndir(wb, `Puan_Gecmisi_${dosyaAdiTemizle(personelAd).replace(/\s+/g, "_")}.xlsx`);
 }

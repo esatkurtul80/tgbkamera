@@ -23,7 +23,7 @@ import {
   type DegerlendirmeFiltre,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBmBolge } from '@/hooks/useBmBolge';
+import { useBmMagazalar } from '@/hooks/useBmMagazalar';
 import type { Degerlendirme } from '@/lib/types';
 
 const SAYFA_BOYU = 100;
@@ -287,7 +287,7 @@ export default function TumDegerlendirmelerScreen() {
   const { kullanici } = useAuth();
   // Bölge müdürü: sonuçlar her koşulda kendi bölgesinin mağazalarıyla sınırlanır
   const bm = kullanici?.rol === 'bolge_muduru';
-  const { magazalar: bmMagazalar, magazaIdSet, loading: bmYukleniyor } = useBmBolge();
+  const { magazalar: bmMagazalar, magazaIdSet, loading: bmYukleniyor } = useBmMagazalar();
   const [raporlar, setRaporlar] = useState<Degerlendirme[]>([]);
   const [loading, setLoading] = useState(true);
   const [dahaYukleniyor, setDahaYukleniyor] = useState(false);

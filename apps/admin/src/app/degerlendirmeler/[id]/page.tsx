@@ -18,7 +18,7 @@ import {
 } from "@/components/degerlendirme/PdfRapor";
 import { fontCss, tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import { useAuth } from "@/contexts/AuthContext";
-import { useBmBolge } from "@/hooks/useBmBolge";
+import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import type { Degerlendirme, TekrarIzleme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -39,7 +39,7 @@ export default function DegerlendirmeRaporPage() {
   const { id } = useParams<{ id: string }>();
   const { kullanici } = useAuth();
   // Bölge müdürü yalnız kendi bölgesinin raporunu görebilir (hook diğer rollerde sorgu çalıştırmaz)
-  const { magazaIdSet, loading: bmLoading } = useBmBolge();
+  const { magazaIdSet, loading: bmLoading } = useBmMagazalar();
   const [d, setD] = useState<Degerlendirme | null>(null);
   const [tasarim, setTasarim] = useState<RaporTasarimAyarlari>(() => tasarimBirlestir(null));
   const [sonRaporlar, setSonRaporlar] = useState<Degerlendirme[]>([]);
