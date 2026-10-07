@@ -10,3 +10,6 @@ build/
 # yerel önbellekler
 .expo/
 .firebase/
+
+# Next.js derleme çıktısı (tüm workspace'ler)
+**/.next/
