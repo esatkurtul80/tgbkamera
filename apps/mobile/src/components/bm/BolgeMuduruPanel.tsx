@@ -70,7 +70,7 @@ export default function BolgeMuduruPanel() {
         <>
           <View style={st.heroKart}>
             <Text style={st.heroEtiket}>Bölge Ortalaması</Text>
-            <Text style={st.heroDeger}>{ort !== null ? `%${ort}` : '—'}</Text>
+            <Text style={st.heroDeger}>{ort !== null ? String(ort) : '—'}</Text>
             <Text style={st.heroAlt}>
               {kapaliSayi} tamamlanan rapor{acikSayi > 0 ? ` · ${acikSayi} devam eden` : ''} · {personeller.length} personel
             </Text>

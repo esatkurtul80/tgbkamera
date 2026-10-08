@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ARALIK_SECENEKLERI, onAyarAraligi, ozelAralik, tarihKisa, type TarihAraligi } from '@/lib/bmRapor';
 import { R } from './tema';
@@ -30,21 +30,23 @@ export default function TarihAraligiSecici({
 
   return (
     <View style={st.wrap}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.cipler}>
+      {/* Çipler sarılır: "Tümü" ve "Özel" dar ekranda da her zaman görünür (yatay kaydırma yok) */}
+      <View style={st.cipler}>
         {ARALIK_SECENEKLERI.map((s) => {
           const aktif = deger.tur === s.tur;
+          const ozel = s.tur === 'ozel';
           return (
             <TouchableOpacity
               key={s.tur}
-              style={[st.cip, aktif && st.cipAktif]}
+              style={[st.cip, aktif && st.cipAktif, ozel && !aktif && st.cipOzel]}
               activeOpacity={0.75}
               onPress={() => onChange(onAyarAraligi(s.tur))}
             >
-              <Text style={[st.cipText, aktif && st.cipTextAktif]}>{s.ad}</Text>
+              <Text style={[st.cipText, aktif && st.cipTextAktif]}>{ozel ? '📅 Tarih Aralığı Seç' : s.ad}</Text>
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
       {deger.tur === 'ozel' && (
         <View style={st.ozelSatir}>
@@ -105,9 +107,10 @@ export default function TarihAraligiSecici({
 
 const st = StyleSheet.create({
   wrap: { gap: 8 },
-  cipler: { paddingHorizontal: 18, gap: 8 },
+  cipler: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 18, gap: 8 },
   cip: { backgroundColor: R.kart, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 },
   cipAktif: { backgroundColor: R.murekkep },
+  cipOzel: { borderWidth: 1, borderStyle: 'dashed', borderColor: '#c4cfc8' },
   cipText: { fontSize: 12.5, fontWeight: '700', color: R.gri },
   cipTextAktif: { color: '#fff' },
   ozelSatir: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18 },

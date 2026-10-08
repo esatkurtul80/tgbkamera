@@ -498,6 +498,36 @@ export async function getDegerlendirmelerByMagazaIds(
   return hepsi;
 }
 
+/**
+ * Verilen mağazaların belirli tarih aralığındaki raporları (olusturmaTarihi) — bölge müdürü
+ * tarih filtresi için sunucu tarafı süzme. magazaId+olusturmaTarihi kompozit indeksini kullanır.
+ */
+export async function getDegerlendirmelerByMagazaIdsAralik(
+  magazaIds: string[],
+  baslangic: Date,
+  bitis: Date
+): Promise<Degerlendirme[]> {
+  if (magazaIds.length === 0) return [];
+  const parcalar: string[][] = [];
+  for (let i = 0; i < magazaIds.length; i += 10) parcalar.push(magazaIds.slice(i, i + 10));
+  const snaplar = await Promise.all(
+    parcalar.map((ids) =>
+      getDocs(
+        query(
+          collection(db, "degerlendirmeler"),
+          where("magazaId", "in", ids),
+          where("olusturmaTarihi", ">=", Timestamp.fromDate(baslangic)),
+          where("olusturmaTarihi", "<=", Timestamp.fromDate(bitis)),
+          orderBy("olusturmaTarihi", "desc")
+        )
+      )
+    )
+  );
+  const hepsi = snaplar.flatMap((s) => s.docs.map((d) => toDoc<Degerlendirme>(d)));
+  hepsi.sort((a, b) => (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0));
+  return hepsi;
+}
+
 /** Belirli bir ay/yıl için (tüm kameramanlar, tüm mağazalar) tüm raporları döner. */
 export async function getDegerlendirmelerByAyYil(ay: number, yil: number): Promise<Degerlendirme[]> {
   const snap = await getDocs(

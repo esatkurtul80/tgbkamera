@@ -12,7 +12,6 @@ import {
 import type { Degerlendirme } from "@/types";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import BolgeMuduruDegerlendirmelerView from "@/components/degerlendirme/BolgeMuduruDegerlendirmelerView";
 
 // ── Kameraman: yalnızca kendi raporları ──────────────────────────────────────
 
@@ -320,11 +319,6 @@ export default function DegerlendirmelerPage() {
 
   if (kullanici?.rol === "kameraman") {
     return <KameramanDegerlendirmelerView />;
-  }
-
-  // Bölge müdürü: yalnız kendi bölgesinin raporları, salt okunur
-  if (kullanici?.rol === "bolge_muduru") {
-    return <BolgeMuduruDegerlendirmelerView />;
   }
 
   return <AdminDegerlendirmelerView />;

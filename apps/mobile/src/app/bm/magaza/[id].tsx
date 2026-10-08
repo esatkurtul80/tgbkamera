@@ -61,7 +61,7 @@ export default function BmMagazaDetayScreen() {
           <>
             <View style={st.heroKart}>
               <Text style={st.heroEtiket}>Mağaza Ortalaması</Text>
-              <Text style={st.heroDeger}>{ort !== null ? `%${ort}` : '—'}</Text>
+              <Text style={st.heroDeger}>{ort !== null ? String(ort) : '—'}</Text>
               <Text style={st.heroAlt}>{kapaliSayi} tamamlanan rapor · {personeller.length} personel</Text>
             </View>
 

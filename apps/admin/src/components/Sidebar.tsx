@@ -101,19 +101,6 @@ const adminSections: NavSection[] = [
   },
 ];
 
-// Bölge müdürü salt okunur: mağaza listesi, personel puanları ve form kırılımı
-// panelin içinde; değerlendirme oluşturma/düzenleme yetkisi yok.
-const bolgeMuduruSections: NavSection[] = [
-  {
-    label: "GENEL",
-    items: [{ name: "Panel", href: "/panel/bolge-muduru", icon: LayoutDashboard }],
-  },
-  {
-    label: "RAPORLAMA",
-    items: [{ name: "Değerlendirmeler", href: "/degerlendirmeler", icon: ClipboardList }],
-  },
-];
-
 const magazaSorumlusuSections: NavSection[] = [
   {
     label: "GENEL",
@@ -161,7 +148,7 @@ const kameramanSections: NavSection[] = [
 
 function getSections(rol?: KullaniciRol): NavSection[] {
   if (!rol || rol === "admin" || rol === "sirketsahibi" || rol === "ust_yonetici") return adminSections;
-  if (rol === "bolge_muduru") return bolgeMuduruSections;
+  // bolge_muduru: kendi kabuğu (components/bm/BmShell.tsx), kenar çubuğu çizilmez
   if (rol === "magaza_sorumlusu") return magazaSorumlusuSections;
   if (rol === "kameraman") return kameramanSections;
   return adminSections;

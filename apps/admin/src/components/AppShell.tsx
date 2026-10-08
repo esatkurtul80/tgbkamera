@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
+import BmShell, { BM_YOL } from "@/components/bm/BmShell";
 import type { KullaniciRol } from "@/types";
 
 const PUBLIC_PATHS = ["/login"];
@@ -86,6 +87,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Bölge müdürünün rapor listesi kendi kabuğundaki Raporlar ekranıdır (rapor detayı /degerlendirmeler/[id] açık kalır)
+    if (rol === "bolge_muduru" && pathname === "/degerlendirmeler") {
+      router.replace(BM_YOL.raporlar);
+      return;
+    }
+
     // Puan Paneli / Tekrar İzlemeler: bölge müdürü ve mağaza sorumlusuna kapalı
     if (
       (rol === "bolge_muduru" || rol === "magaza_sorumlusu") &&
@@ -129,6 +136,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  // Bölge müdürü: telefon öncelikli, alt sekmeli kabuk (admin kenar çubuğu yok)
+  if (kullanici.rol === "bolge_muduru") return <BmShell>{children}</BmShell>;
 
   return (
     <>

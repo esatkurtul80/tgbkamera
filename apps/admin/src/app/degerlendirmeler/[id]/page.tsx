@@ -38,6 +38,7 @@ function oranRengi(oran: number): string {
 export default function DegerlendirmeRaporPage() {
   const { id } = useParams<{ id: string }>();
   const { kullanici } = useAuth();
+  const bm = kullanici?.rol === "bolge_muduru";
   // Bölge müdürü yalnız kendi bölgesinin raporunu görebilir (hook diğer rollerde sorgu çalıştırmaz)
   const { magazaIdSet, loading: bmLoading } = useBmMagazalar();
   const [d, setD] = useState<Degerlendirme | null>(null);
@@ -144,8 +145,10 @@ export default function DegerlendirmeRaporPage() {
   return (
     <div className="w-full print:max-w-full">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-3 mb-5 print:hidden">
-        <Link href="/degerlendirmeler" className="text-sm text-slate-500 hover:text-slate-700">Değerlendirmeler</Link>
+      <div className="flex items-center gap-3 mb-5 print:hidden flex-wrap">
+        <Link href={bm ? "/panel/bolge-muduru/raporlar" : "/degerlendirmeler"} className="text-sm text-slate-500 hover:text-slate-700">
+          {bm ? "← Raporlar" : "Değerlendirmeler"}
+        </Link>
         <span className="text-slate-300">/</span>
         <span className="text-sm font-semibold text-slate-800">Rapor</span>
         <div className="ml-auto flex items-center gap-2">
