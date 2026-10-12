@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, DM_Mono, Playfair_Display, Archivo, Spline_Sans_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -15,6 +15,19 @@ const splineMono = Spline_Sans_Mono({ subsets: ["latin", "latin-ext"], variable:
 export const metadata: Metadata = {
   title: "TGB Kamera Admin",
   description: "TGB Kamera Yönetim Paneli",
+  applicationName: "TGB Kamera",
+  manifest: "/manifest.webmanifest",
+  // iOS ana ekran: bağımsız (standalone) açılış; kapsam manifest'ten ("/") gelir,
+  // böylece rapor detayı gibi başka yollar uygulama içi Safari penceresinde açılmaz.
+  appleWebApp: { capable: true, title: "TGB Kamera", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#9b1b30",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Tüm sayfalar oturum açmış kullanıcıya göre istemci tarafında render oluyor;

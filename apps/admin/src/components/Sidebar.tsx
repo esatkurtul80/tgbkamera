@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, FileText, Layers, HelpCircle, Users, ClipboardList,
-  LogOut, Camera, PanelLeftClose, PanelLeftOpen, Store, UserCog,
+  LogOut, PanelLeftClose, PanelLeftOpen, Store, UserCog,
   TrendingUp, Plus, BarChart2, Trash2, Palette, Table, MessageSquare, File,
   ChevronDown, ChevronRight, Gauge, Repeat, UserX, BarChart3, Trophy,
 } from "lucide-react";
@@ -192,9 +193,7 @@ export default function Sidebar() {
       <div className={`flex items-center px-5 py-4.5 border-b border-slate-100 ${collapsed ? "justify-center" : "justify-between"}`}>
         {!collapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center shrink-0">
-              <Camera size={14} className="text-white" />
-            </div>
+            <Image src="/logo.png" alt="TGB Kamera" width={64} height={39} priority className="h-7 w-auto shrink-0" />
             <span className="font-semibold text-slate-900 text-sm truncate">TGB Kamera</span>
           </div>
         )}

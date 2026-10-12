@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Store, ClipboardList, Menu, Camera } from "lucide-react";
+import Image from "next/image";
+import { LayoutDashboard, Store, ClipboardList, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { BM } from "./tema";
 import { BmAralikProvider } from "./BmAralikContext";
@@ -44,9 +45,7 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
         {/* Geniş ekran: üst sekme çubuğu */}
         <header className="hidden md:flex items-center gap-6 px-6 h-14 bg-white border-b border-[#e2e8e4] shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className={`w-7 h-7 rounded-md ${BM.murekkepBg} flex items-center justify-center`}>
-              <Camera size={14} className="text-white" />
-            </div>
+            <Image src="/logo.png" alt="TGB Kamera" width={64} height={39} priority className="h-7 w-auto" />
             <span className={`text-sm font-extrabold ${BM.murekkep}`}>TGB Kamera</span>
           </div>
           <nav className="flex items-center gap-1 ml-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Camera } from "lucide-react";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
@@ -33,9 +33,7 @@ export default function LoginPage() {
       {/* Left: Login */}
       <div className="flex flex-col w-full lg:w-[440px] xl:w-[480px] shrink-0 px-8 sm:px-14 py-10 bg-white">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
-            <Camera size={17} className="text-white" />
-          </div>
+          <Image src="/logo.png" alt="TGB Kamera" width={96} height={59} priority className="h-10 w-auto shrink-0" />
           <span className="text-base font-bold text-slate-900">TGB Kamera</span>
         </div>
 
@@ -108,8 +106,8 @@ export default function LoginPage() {
         />
 
         <div className="relative text-white px-16 max-w-lg">
-          <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur flex items-center justify-center mb-8 border border-white/20">
-            <Camera size={26} className="text-white" />
+          <div className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 mb-8 shadow-lg shadow-black/20">
+            <Image src="/logo.png" alt="TGB Kamera" width={160} height={98} className="h-14 w-auto" />
           </div>
           <h2 className="text-3xl font-bold leading-tight mb-4">
             Mağaza denetimlerini ve personel performansını tek panelden yönetin.
