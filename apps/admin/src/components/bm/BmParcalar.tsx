@@ -8,11 +8,11 @@ export function BmBaslik({ baslik, alt, sol, sag }: {
   baslik: string; alt?: string; sol?: React.ReactNode; sag?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 pt-2 pb-3">
+    <div className="flex items-center gap-3 pt-1 pb-2.5">
       {sol}
       <div className="flex-1 min-w-0">
-        <h1 className={`text-[24px] leading-tight font-extrabold tracking-tight truncate ${BM.murekkep}`}>{baslik}</h1>
-        {alt && <p className={`text-[13px] font-semibold mt-0.5 ${BM.gri}`}>{alt}</p>}
+        <h1 className={`text-[22px] leading-tight font-extrabold tracking-tight truncate ${BM.murekkep}`}>{baslik}</h1>
+        {alt && <p className={`text-[12.5px] font-semibold mt-0.5 ${BM.gri}`}>{alt}</p>}
       </div>
       {sag}
     </div>
@@ -31,12 +31,24 @@ export function BmKart({ children, className = "" }: { children: React.ReactNode
   return <div className={`${BM.kart} rounded-[22px] overflow-hidden ${className}`}>{children}</div>;
 }
 
-export function HeroKart({ etiket, deger, alt }: { etiket: string; deger: string; alt: string }) {
+export function HeroKart({ etiket, deger, alt, ust, sag }: {
+  etiket: string; deger: string; alt?: string;
+  /** Kartın en üstünde, ayırıcı çizgiyle ayrılan alan (ör. profil satırı). */
+  ust?: React.ReactNode;
+  /** Etiket + puanın sağındaki alan (ör. tarih çipleri). */
+  sag?: React.ReactNode;
+}) {
   return (
-    <div className={`${BM.murekkepBg} rounded-[22px] p-5 mt-4`}>
-      <p className="text-xs font-semibold text-white/65">{etiket}</p>
-      <p className="text-[44px] leading-none font-extrabold text-white mt-2 tracking-tight tabular-nums">{deger}</p>
-      <p className="text-xs font-medium text-white/55 mt-2">{alt}</p>
+    <div className={`${BM.bordoBg} rounded-[22px] px-4 py-3.5 mt-3`}>
+      {ust && <div className="mb-3 pb-3 border-b border-white/10">{ust}</div>}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold text-white/65">{etiket}</p>
+          <p className="text-[36px] leading-none font-extrabold text-white mt-1.5 tracking-tight tabular-nums">{deger}</p>
+        </div>
+        {sag && <div className="shrink-0 max-w-[62%]">{sag}</div>}
+      </div>
+      {alt && <p className="text-[11px] font-medium text-white/55 mt-1.5">{alt}</p>}
     </div>
   );
 }

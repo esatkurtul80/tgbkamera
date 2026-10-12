@@ -38,7 +38,7 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
   const ad = kullanici?.displayName ?? "Bölge Müdürü";
 
   return (
-    <div className={`flex flex-col flex-1 min-w-0 h-screen ${BM.zemin}`}>
+    <div className={`relative flex flex-col flex-1 min-w-0 h-screen ${BM.zemin}`}>
       {/* Geniş ekran: üst sekme çubuğu */}
       <header className="hidden md:flex items-center gap-6 px-6 h-14 bg-white border-b border-[#e2e8e4] shrink-0">
         <div className="flex items-center gap-2.5">
@@ -75,31 +75,35 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* İçerik: telefon genişliğinde sütun; geniş ekranda ortalı */}
+      {/* İçerik: telefon genişliğinde sütun; geniş ekranda ortalı. Dar ekranda alttaki yüzen menü için boşluk bırakılır. */}
       <main className="flex-1 min-h-0 overflow-auto">
-        <div className="mx-auto w-full max-w-2xl px-4 pt-3 pb-8 md:pt-6">{children}</div>
+        <div className="mx-auto w-full max-w-2xl px-4 pt-2 pb-28 md:pt-6 md:pb-8">{children}</div>
       </main>
 
-      {/* Dar ekran: alt sekme çubuğu */}
+      {/* Dar ekran: yüzen elips (pill) alt menü — ekranın altından biraz yukarıda, içerik altından kayar */}
       <nav
-        className="md:hidden shrink-0 flex items-stretch bg-white border-t border-[#e2e8e4]"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="md:hidden absolute left-0 right-0 z-20 flex justify-center px-5 pointer-events-none"
+        style={{ bottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
       >
-        {SEKMELER.map((s) => {
-          const aktif = aktifMi(pathname, s);
-          return (
-            <Link
-              key={s.href}
-              href={s.href}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10.5px] font-bold transition-colors ${
-                aktif ? BM.vurgu : BM.soluk
-              }`}
-            >
-              <s.icon size={21} strokeWidth={aktif ? 2.4 : 2} />
-              {s.ad}
-            </Link>
-          );
-        })}
+        <div
+          className={`pointer-events-auto flex items-center w-full max-w-[360px] ${BM.bordoBg} rounded-full p-1.5 shadow-[0_12px_32px_rgba(155,27,48,0.35)]`}
+        >
+          {SEKMELER.map((s) => {
+            const aktif = aktifMi(pathname, s);
+            return (
+              <Link
+                key={s.href}
+                href={s.href}
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 h-[50px] rounded-full text-[10px] font-bold transition-colors ${
+                  aktif ? "bg-white/15 text-white" : "text-white/60 hover:text-white/90"
+                }`}
+              >
+                <s.icon size={19} strokeWidth={aktif ? 2.4 : 2} />
+                {s.ad}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

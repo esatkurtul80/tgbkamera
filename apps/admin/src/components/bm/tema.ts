@@ -7,6 +7,7 @@ export const BM = {
   kart: "bg-white",
   murekkep: "text-[#15201b]",
   murekkepBg: "bg-[#15201b]",
+  bordoBg: "bg-[#9b1b30]",
   gri: "text-[#77857e]",
   soluk: "text-[#a4b1aa]",
   vurgu: "text-[#e85a43]",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getDegerlendirmelerByMagazaIds, getDegerlendirmelerByMagazaIdsAralik } from '@/lib/firestore';
 import type { Degerlendirme, Magaza } from '@/lib/types';
-import type { TarihAraligi } from '@/lib/bmRapor';
+import { bmGorunurRaporlar, type TarihAraligi } from '@/lib/bmRapor';
 
 /**
  * Bölge müdürünün mağazalarına ait raporları seçili tarih aralığında çeker.
@@ -32,7 +32,7 @@ export function useBmRaporlar(magazalar: Magaza[], aralik: TarihAraligi, hazir: 
           aralik.baslangic && aralik.bitis
             ? await getDegerlendirmelerByMagazaIdsAralik(ids, aralik.baslangic, aralik.bitis)
             : await getDegerlendirmelerByMagazaIds(ids);
-        if (!iptal) setRaporlar(sonuc);
+        if (!iptal) setRaporlar(bmGorunurRaporlar(sonuc));
       } finally {
         if (!iptal) {
           setLoading(false);

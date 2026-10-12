@@ -180,3 +180,11 @@ export function magazaGruplari(magazalar: Magaza[], raporlar: Degerlendirme[]): 
 export function genelOrtalama(raporlar: Degerlendirme[]): number | null {
   return ortalama(raporlar.map(ortalamaPuani).filter((p): p is number => p !== null));
 }
+
+/**
+ * Bölge müdürü ekranlarında gösterilecek raporlar: puansız formun henüz tamamlanmamış
+ * (devam eden) raporları gizlenir; puanlı formların devam edenleri rozetle görünmeye devam eder.
+ */
+export function bmGorunurRaporlar(raporlar: Degerlendirme[]): Degerlendirme[] {
+  return raporlar.filter((d) => !(d.durum === "acik" && !d.puanli));
+}

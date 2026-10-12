@@ -28,10 +28,9 @@ export default function BolgeMuduruPaneliPage() {
   const magazaOzet = useMemo(() => magazaGruplari(magazalar, raporlar), [magazalar, raporlar]);
   const personeller = useMemo(() => personelGruplari(raporlar), [raporlar]);
   const ort = useMemo(() => genelOrtalama(raporlar), [raporlar]);
-  const kapaliSayi = raporlar.filter((d) => d.durum !== "acik").length;
-  const acikSayi = raporlar.length - kapaliSayi;
   const gorunenPersonel = tumPersonel ? personeller : personeller.slice(0, 8);
   const ad = kullanici?.displayName ?? "Bölge Müdürü";
+  const yukleniyor = loading || magazaLoading;
 
   if (magazaYok) return <MagazaAtanmamis />;
 
@@ -39,36 +38,38 @@ export default function BolgeMuduruPaneliPage() {
 
   return (
     <div>
-      {/* Profil pili — mobildeki üst alan */}
-      <div className="flex items-center pt-1 pb-4 md:hidden">
-        <div className={`inline-flex items-center gap-2.5 ${BM.kart} rounded-full pl-1.5 pr-4 py-1.5`}>
-          <div className={`w-[38px] h-[38px] rounded-full ${BM.murekkepBg} flex items-center justify-center`}>
-            <span className="text-[15px] font-extrabold text-white">{ad.charAt(0).toUpperCase()}</span>
+      {/* Üstte başlık yok: profil, mağaza/aralık bilgisi ve tarih seçici tek siyah kartta.
+          Kart yüklenirken de durur ki aralık değiştirilirken çipler kaybolmasın. */}
+      <HeroKart
+        etiket="Bölge Ortalaması"
+        deger={yukleniyor ? "…" : ort !== null ? String(ort) : "—"}
+        sag={<TarihAraligiSecici deger={aralik} onChange={setAralik} koyu />}
+        ust={
+          <div className="flex items-center gap-2.5">
+            <Link
+              href={BM_YOL.menu}
+              className="flex items-center gap-2 min-w-0 flex-1 rounded-full hover:opacity-80 transition-opacity"
+              aria-label={`${ad} · Bölge Müdürü`}
+            >
+              <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                <span className="text-[13px] font-extrabold text-white">{ad.charAt(0).toUpperCase()}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9.5px] font-semibold text-white/50 leading-tight">Bölge Müdürü</p>
+                <p className="text-[12.5px] font-extrabold text-white truncate leading-tight">{ad}</p>
+              </div>
+            </Link>
+            <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80">
+              {magazalar.length} mağaza · {aralikEtiketi(aralik)}
+            </span>
           </div>
-          <div>
-            <p className={`text-[10.5px] font-semibold ${BM.soluk}`}>Bölge Müdürü</p>
-            <p className={`text-[13.5px] font-extrabold ${BM.murekkep}`}>{ad}</p>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
-      <h1 className={`text-[26px] leading-tight font-extrabold tracking-tight ${BM.murekkep}`}>Bölgem</h1>
-      <p className={`text-[13px] font-semibold mt-0.5 ${BM.gri}`}>{magazalar.length} mağaza · {aralikEtiketi(aralik)}</p>
-
-      <div className="mt-3.5">
-        <TarihAraligiSecici deger={aralik} onChange={setAralik} />
-      </div>
-
-      {loading || magazaLoading ? (
+      {yukleniyor ? (
         <Yukleniyor />
       ) : (
         <>
-          <HeroKart
-            etiket="Bölge Ortalaması"
-            deger={ort !== null ? String(ort) : "—"}
-            alt={`${kapaliSayi} tamamlanan rapor${acikSayi > 0 ? ` · ${acikSayi} devam eden` : ""} · ${personeller.length} personel`}
-          />
-
           <section className="mt-5">
             <BolumBaslik baslik="Mağazalar" link={BM_YOL.magazalar} linkAd="Tümünü Gör" />
             <BmKart>

@@ -12,10 +12,12 @@ import { BM } from "./tema";
  * (Mobil ikizi: apps/mobile/src/components/bm/TarihAraligiSecici.tsx)
  */
 export default function TarihAraligiSecici({
-  deger, onChange,
+  deger, onChange, koyu = false,
 }: {
   deger: TarihAraligi;
   onChange: (a: TarihAraligi) => void;
+  /** Koyu kart içinde, sağa yaslı dar sütun: seçili çip açık kenarlıkla ayrışır, tarih alanları alt alta dizilir. */
+  koyu?: boolean;
 }) {
   function tarihUygula(alan: "baslangic" | "bitis", v: string) {
     const tarih = tarihInputCoz(v);
@@ -30,7 +32,7 @@ export default function TarihAraligiSecici({
   return (
     <div className="flex flex-col gap-2">
       {/* Çipler sarılır: "Tümü" ve "Özel" telefonda da her zaman görünür (yatay kaydırma yok) */}
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-1.5 ${koyu ? "justify-end" : ""}`}>
         {ARALIK_SECENEKLERI.map((s) => {
           const aktif = deger.tur === s.tur;
           const ozel = s.tur === "ozel";
@@ -39,8 +41,10 @@ export default function TarihAraligiSecici({
               key={s.tur}
               type="button"
               onClick={() => onChange(onAyarAraligi(s.tur))}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-[12.5px] font-bold transition-colors cursor-pointer ${
-                aktif ? `${BM.murekkepBg} text-white` : `${BM.kart} ${BM.gri} hover:bg-[#f7faf8]`
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-bold transition-colors cursor-pointer ${
+                aktif
+                  ? `${BM.murekkepBg} text-white ${koyu ? "ring-1 ring-white/35" : ""}`
+                  : `${BM.kart} ${BM.gri} hover:bg-[#f7faf8]`
               } ${ozel && !aktif ? "border border-dashed border-[#c4cfc8]" : ""}`}
             >
               {ozel && <CalendarDays size={13} />}
@@ -51,7 +55,7 @@ export default function TarihAraligiSecici({
       </div>
 
       {deger.tur === "ozel" && (
-        <div className="flex items-center gap-2">
+        <div className={`flex gap-2 ${koyu ? "flex-col items-stretch" : "items-center"}`}>
           <label className={`flex-1 min-w-0 ${BM.kart} rounded-2xl px-3 py-2`}>
             <span className={`block text-[10px] font-bold tracking-wider ${BM.soluk}`}>BAŞLANGIÇ</span>
             <input
@@ -61,7 +65,7 @@ export default function TarihAraligiSecici({
               className={inputSinif}
             />
           </label>
-          <span className={BM.soluk}>–</span>
+          {!koyu && <span className={BM.soluk}>–</span>}
           <label className={`flex-1 min-w-0 ${BM.kart} rounded-2xl px-3 py-2`}>
             <span className={`block text-[10px] font-bold tracking-wider ${BM.soluk}`}>BİTİŞ</span>
             <input
