@@ -105,7 +105,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="flex h-dvh items-center justify-center bg-slate-50">
         <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -117,7 +117,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Firebase kullanıcısı var ama Firestore profili yok ya da rolü tanımlanmamış
   if (!kullanici || !kullanici.rol) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="flex h-dvh items-center justify-center bg-slate-50">
         <div className="text-center max-w-sm px-6">
           <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">🔒</span>

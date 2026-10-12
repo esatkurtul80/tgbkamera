@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromCache,
+  getDocFromCache,
   getDoc,
   addDoc,
   setDoc,
@@ -140,8 +142,12 @@ export async function getMagazalar(): Promise<Magaza[]> {
  * Bölge müdürünün sorumlu olduğu mağazalar (magazalar.bolgeMuduruId === uid).
  * Sıralama bellekte yapılır; where + orderBy için kompozit indeks gerekmez.
  */
-export async function getMagazalarByBolgeMuduru(uid: string): Promise<Magaza[]> {
-  const snap = await getDocs(
+/** kaynak: "sunucu" (varsayılan) ya da "onbellek" (kalıcı yerel önbellek; yoksa boş döner) */
+export type VeriKaynagi = "sunucu" | "onbellek";
+const oku = (kaynak: VeriKaynagi) => (kaynak === "onbellek" ? getDocsFromCache : getDocs);
+
+export async function getMagazalarByBolgeMuduru(uid: string, kaynak: VeriKaynagi = "sunucu"): Promise<Magaza[]> {
+  const snap = await oku(kaynak)(
     query(collection(db, "magazalar"), where("bolgeMuduruId", "==", uid))
   );
   return snap.docs
@@ -476,14 +482,15 @@ export async function getDegerlendirmelerByOlusturmaAraligi(
  */
 export async function getDegerlendirmelerByMagazaIds(
   magazaIds: string[],
-  chunkLimit = 500
+  chunkLimit = 500,
+  kaynak: VeriKaynagi = "sunucu"
 ): Promise<Degerlendirme[]> {
   if (magazaIds.length === 0) return [];
   const parcalar: string[][] = [];
   for (let i = 0; i < magazaIds.length; i += 10) parcalar.push(magazaIds.slice(i, i + 10));
   const snaplar = await Promise.all(
     parcalar.map((ids) =>
-      getDocs(
+      oku(kaynak)(
         query(
           collection(db, "degerlendirmeler"),
           where("magazaId", "in", ids),
@@ -505,14 +512,15 @@ export async function getDegerlendirmelerByMagazaIds(
 export async function getDegerlendirmelerByMagazaIdsAralik(
   magazaIds: string[],
   baslangic: Date,
-  bitis: Date
+  bitis: Date,
+  kaynak: VeriKaynagi = "sunucu"
 ): Promise<Degerlendirme[]> {
   if (magazaIds.length === 0) return [];
   const parcalar: string[][] = [];
   for (let i = 0; i < magazaIds.length; i += 10) parcalar.push(magazaIds.slice(i, i + 10));
   const snaplar = await Promise.all(
     parcalar.map((ids) =>
-      getDocs(
+      oku(kaynak)(
         query(
           collection(db, "degerlendirmeler"),
           where("magazaId", "in", ids),

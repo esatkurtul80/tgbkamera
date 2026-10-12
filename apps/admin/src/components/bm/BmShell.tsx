@@ -41,7 +41,7 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
 
   return (
     <BmAralikProvider>
-      <div className={`relative flex flex-col flex-1 min-w-0 h-screen ${BM.zemin}`}>
+      <div className={`relative flex flex-col flex-1 min-w-0 h-dvh ${BM.zemin}`}>
         {/* Geniş ekran: üst sekme çubuğu */}
         <header className="hidden md:flex items-center gap-6 px-6 h-14 bg-white border-b border-[#e2e8e4] shrink-0">
           <div className="flex items-center gap-2.5">

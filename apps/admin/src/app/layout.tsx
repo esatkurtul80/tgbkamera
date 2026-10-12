@@ -40,7 +40,7 @@ export const dynamic = "force-dynamic";
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr" className={`${geist.variable} ${dmMono.variable} ${playfair.variable} ${archivo.variable} ${splineMono.variable}`}>
-      <body className="flex h-screen overflow-hidden bg-slate-50 antialiased font-[var(--font-geist)]">
+      <body className="flex h-dvh overflow-hidden bg-slate-50 antialiased font-[var(--font-geist)]">
         <StaleBuildGuard />
         <AuthProvider>
           <AppShell>{children}</AppShell>

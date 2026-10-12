@@ -61,7 +61,7 @@ export default function BolgeMuduruPaneliPage() {
               </div>
             </Link>
             <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80">
-              {magazalar.length} mağaza · {aralikEtiketi(aralik)}
+              {magazaLoading ? "…" : `${magazalar.length} mağaza`} · {aralikEtiketi(aralik)}
             </span>
           </div>
         }

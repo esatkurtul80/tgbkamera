@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocFromCache, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { Kullanici } from "@/types";
 
@@ -34,7 +34,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(firebaseUser);
 
       if (firebaseUser) {
-        const snap = await getDoc(doc(db, "users", firebaseUser.uid));
+        const ref = doc(db, "users", firebaseUser.uid);
+        // Önce kalıcı önbellekteki profil (tekrar açılışta anında), sonra sunucudaki güncel profil
+        try {
+          const onbellek = await getDocFromCache(ref);
+          if (onbellek.exists()) {
+            setKullanici({ id: onbellek.id, ...onbellek.data() } as Kullanici);
+            setLoading(false);
+          }
+        } catch {
+          // önbellekte yok
+        }
+        const snap = await getDoc(ref);
         if (snap.exists()) {
           setKullanici({ id: snap.id, ...snap.data() } as Kullanici);
         } else {
