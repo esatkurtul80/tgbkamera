@@ -41,7 +41,7 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
 
   return (
     <BmAralikProvider>
-      <div className={`relative flex flex-col flex-1 min-w-0 h-dvh ${BM.zemin}`}>
+      <div className={`fixed inset-0 flex flex-col min-w-0 ${BM.zemin}`}>
         {/* Geniş ekran: üst sekme çubuğu */}
         <header className="hidden md:flex items-center gap-6 px-6 h-14 bg-white border-b border-[#e2e8e4] shrink-0">
           <div className="flex items-center gap-2.5">
@@ -84,7 +84,7 @@ export default function BmShell({ children }: { children: React.ReactNode }) {
         {/* Dar ekran: yüzen elips (pill) alt menü — ekranın altından biraz yukarıda, içerik altından kayar */}
         <nav
           className="md:hidden absolute left-0 right-0 z-20 flex justify-center px-5 pointer-events-none"
-          style={{ bottom: "calc(14px + env(safe-area-inset-bottom, 0px))" }}
+          style={{ bottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}
         >
           <div
             className={`pointer-events-auto flex items-center w-full max-w-[360px] ${BM.bordoBg} rounded-full p-1.5 shadow-[0_12px_32px_rgba(155,27,48,0.35)]`}
