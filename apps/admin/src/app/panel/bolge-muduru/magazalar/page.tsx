@@ -5,8 +5,9 @@ import Link from "next/link";
 import { ChevronRight, Store } from "lucide-react";
 import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import { useBmRaporlar } from "@/hooks/useBmRaporlar";
-import { aralikEtiketi, magazaGruplari, onAyarAraligi, type TarihAraligi } from "@/lib/bmRapor";
+import { aralikEtiketi, magazaGruplari } from "@/lib/bmRapor";
 import TarihAraligiSecici from "@/components/bm/TarihAraligiSecici";
+import { useBmAralik } from "@/components/bm/BmAralikContext";
 import PuanPill from "@/components/bm/PuanPill";
 import { BM_YOL } from "@/components/bm/BmShell";
 import { AramaKutusu, BmBaslik, BosDurum, MagazaAtanmamis, Yukleniyor } from "@/components/bm/BmParcalar";
@@ -15,7 +16,7 @@ import { BM } from "@/components/bm/tema";
 /** Bölge müdürü "Mağazalarım" (web): atanmış mağazalar, seçili aralıkta rapor sayısı ve ortalama. */
 export default function BmMagazalarPage() {
   const { magazalar, loading: magazaLoading, magazaYok } = useBmMagazalar();
-  const [aralik, setAralik] = useState<TarihAraligi>(() => onAyarAraligi("buAy"));
+  const { aralik, setAralik } = useBmAralik();
   const [arama, setArama] = useState("");
   const { raporlar, loading } = useBmRaporlar(magazalar, aralik, !magazaLoading && !magazaYok);
 

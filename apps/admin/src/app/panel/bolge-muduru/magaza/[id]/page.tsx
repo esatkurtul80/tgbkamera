@@ -7,8 +7,9 @@ import { ChevronRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import { useBmRaporlar } from "@/hooks/useBmRaporlar";
-import { aralikEtiketi, genelOrtalama, onAyarAraligi, personelGruplari, type TarihAraligi } from "@/lib/bmRapor";
+import { aralikEtiketi, genelOrtalama, personelGruplari } from "@/lib/bmRapor";
 import TarihAraligiSecici from "@/components/bm/TarihAraligiSecici";
+import { useBmAralik } from "@/components/bm/BmAralikContext";
 import PuanPill from "@/components/bm/PuanPill";
 import RaporSatiri from "@/components/bm/RaporSatiri";
 import { BM_YOL } from "@/components/bm/BmShell";
@@ -24,7 +25,7 @@ export default function BmMagazaDetayPage() {
   const { id } = useParams<{ id: string }>();
   const { kullanici } = useAuth();
   const { magazalar, loading: magazaLoading, magazaIdSet } = useBmMagazalar();
-  const [aralik, setAralik] = useState<TarihAraligi>(() => onAyarAraligi("buAy"));
+  const { aralik, setAralik } = useBmAralik();
   const [acikPersonel, setAcikPersonel] = useState<string | null>(null);
 
   const magaza = useMemo(() => magazalar.filter((m) => m.id === id), [magazalar, id]);

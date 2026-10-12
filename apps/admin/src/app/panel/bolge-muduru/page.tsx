@@ -6,8 +6,9 @@ import { ChevronRight, Store } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBmMagazalar } from "@/hooks/useBmMagazalar";
 import { useBmRaporlar } from "@/hooks/useBmRaporlar";
-import { aralikEtiketi, genelOrtalama, magazaGruplari, onAyarAraligi, personelGruplari, type TarihAraligi } from "@/lib/bmRapor";
+import { aralikEtiketi, genelOrtalama, magazaGruplari, personelGruplari } from "@/lib/bmRapor";
 import TarihAraligiSecici from "@/components/bm/TarihAraligiSecici";
+import { useBmAralik } from "@/components/bm/BmAralikContext";
 import PuanPill from "@/components/bm/PuanPill";
 import { BM_YOL } from "@/components/bm/BmShell";
 import { Avatar, BmKart, BolumBaslik, HeroKart, MagazaAtanmamis, Yukleniyor } from "@/components/bm/BmParcalar";
@@ -21,7 +22,7 @@ import { BM } from "@/components/bm/tema";
 export default function BolgeMuduruPaneliPage() {
   const { kullanici } = useAuth();
   const { magazalar, loading: magazaLoading, magazaYok } = useBmMagazalar();
-  const [aralik, setAralik] = useState<TarihAraligi>(() => onAyarAraligi("buAy"));
+  const { aralik, setAralik } = useBmAralik();
   const { raporlar, loading } = useBmRaporlar(magazalar, aralik, !magazaLoading && !magazaYok);
   const [tumPersonel, setTumPersonel] = useState(false);
 

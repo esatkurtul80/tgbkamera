@@ -224,7 +224,7 @@ function raporYuzde(r: Degerlendirme): number | null {
 
 /** Son 3 ayın puanları: aya göre gruplanır (aynı ayda birden fazla puanlı rapor → ortalama),
  *  en yeni 3 ay seçilir ve eskiden yeniye (Temmuz → Ağustos → Eylül) sıralanır. */
-function sonAyPuanlariHesapla(raporlar: Degerlendirme[]) {
+export function sonAyPuanlariHesapla(raporlar: Degerlendirme[]) {
   const gruplar = new Map<number, { ay: number; yil: number; puanlar: number[]; formlar: string[] }>();
   for (const r of raporlar) {
     const ayYil = raporAyYil(r);

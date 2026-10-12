@@ -4,19 +4,25 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Store, X } from "lucide-react";
 import { useBmMagazalar } from "@/hooks/useBmMagazalar";
+import { getFormlar } from "@/lib/firestore";
 import { useBmRaporlar } from "@/hooks/useBmRaporlar";
-import { aralikEtiketi, magazaGruplari, onAyarAraligi, raporTipi, type RaporTipi, type TarihAraligi } from "@/lib/bmRapor";
+import { aralikEtiketi, magazaGruplari, raporTipi, type RaporTipi } from "@/lib/bmRapor";
 import TarihAraligiSecici from "@/components/bm/TarihAraligiSecici";
+import { useBmAralik } from "@/components/bm/BmAralikContext";
 import PuanPill from "@/components/bm/PuanPill";
 import RaporSatiri from "@/components/bm/RaporSatiri";
 import { AramaKutusu, BmBaslik, BmKart, BosDurum, MagazaAtanmamis, Yukleniyor } from "@/components/bm/BmParcalar";
 import { BM } from "@/components/bm/tema";
 
-const TIP_SECENEK: { id?: RaporTipi; ad: string }[] = [
+/** Sekme: rapor tipi ya da "takip" (zayıf personel takip raporları, tekrarIzleme: true). */
+type SekmeTipi = RaporTipi | "takip";
+
+const TIP_SECENEK: { id?: SekmeTipi; ad: string }[] = [
   { id: undefined, ad: "Tümü" },
   { id: "matris", ad: "Puanlı" },
   { id: "yorumlu", ad: "Yorumlu" },
   { id: "puansiz", ad: "Puansız" },
+  { id: "takip", ad: "Zayıf Personel" },
 ];
 
 /**
@@ -35,11 +41,19 @@ export default function BmRaporlarPage() {
 function BmRaporlar() {
   const params = useSearchParams();
   const { magazalar, loading: magazaLoading, magazaYok } = useBmMagazalar();
-  const [aralik, setAralik] = useState<TarihAraligi>(() => onAyarAraligi("buAy"));
+  const { aralik, setAralik } = useBmAralik();
   const [magazaId, setMagazaId] = useState<string | undefined>(() => params.get("magazaId") ?? undefined);
   const [personelId, setPersonelId] = useState<string | undefined>(() => params.get("personelId") ?? undefined);
-  const [tip, setTip] = useState<RaporTipi | undefined>(undefined);
+  const [tip, setTip] = useState<SekmeTipi | undefined>(undefined);
   const [arama, setArama] = useState("");
+  // Admin'in Formlar'da "Zayıf Personel Formu" işaretlediği formlar: bu formlarla yazılan raporlar
+  // (ör. "PUANSIZ PERSONEL") takip işareti olmasa da Zayıf Personel sekmesine gider. Okunamazsa boş kalır.
+  const [zayifFormIdleri, setZayifFormIdleri] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    getFormlar()
+      .then((formlar) => setZayifFormIdleri(new Set(formlar.filter((f) => f.zayifPersonelFormu).map((f) => f.id))))
+      .catch(() => {});
+  }, []);
   const { raporlar, loading } = useBmRaporlar(magazalar, aralik, !magazaLoading && !magazaYok);
 
   // Aynı sayfadayken panelden yeni bir personel/mağaza seçilirse filtreyi güncelle
@@ -60,14 +74,33 @@ function BmRaporlar() {
     return raporlar.filter((d) => {
       if (magazaId && d.magazaId !== magazaId) return false;
       if (personelId && d.personelId !== personelId) return false;
-      if (tip && raporTipi(d) !== tip) return false;
+      // Zayıf personel raporları (takip işaretli ya da zayıf personel formuyla yazılmış) yalnız o sekmede; diğerlerinde gizli
+      const zayif = !!d.tekrarIzleme || zayifFormIdleri.has(d.formId);
+      if (tip === "takip") {
+        if (!zayif) return false;
+      } else {
+        if (zayif) return false;
+        if (tip && raporTipi(d) !== tip) return false;
+      }
       if (q && !d.personelAd.toLowerCase().includes(q) && !d.formAd.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [raporlar, magazaId, personelId, tip, arama]);
+  }, [raporlar, magazaId, personelId, tip, arama, zayifFormIdleri]);
 
+  // Mağaza içindeki raporlar personel adına göre A→Z; aynı personelde en yeni üstte; mağaza raporları en sonda
   const bolumler = useMemo(
-    () => magazaGruplari(magazalar, suzulmus).filter((g) => g.raporlar.length > 0),
+    () =>
+      magazaGruplari(magazalar, suzulmus)
+        .filter((g) => g.raporlar.length > 0)
+        .map((g) => ({
+          ...g,
+          raporlar: [...g.raporlar].sort((a, b) => {
+            if (!!a.magazaRaporu !== !!b.magazaRaporu) return a.magazaRaporu ? 1 : -1;
+            const ad = (a.personelAd || "").localeCompare(b.personelAd || "", "tr", { sensitivity: "base" });
+            if (ad !== 0) return ad;
+            return (b.olusturmaTarihi?.seconds ?? 0) - (a.olusturmaTarihi?.seconds ?? 0);
+          }),
+        })),
     [magazalar, suzulmus]
   );
 
@@ -95,7 +128,7 @@ function BmRaporlar() {
       </div>
 
       {/* Tip segmenti */}
-      <div className="flex bg-[#e2e8e4] rounded-xl p-[3px] gap-[3px] mt-2.5">
+      <div className="flex bg-[#e2e8e4] rounded-xl p-[3px] gap-[3px] mt-2.5 overflow-x-auto no-scrollbar">
         {TIP_SECENEK.map((s) => {
           const aktif = tip === s.id;
           return (
@@ -103,7 +136,7 @@ function BmRaporlar() {
               key={s.ad}
               type="button"
               onClick={() => setTip(s.id)}
-              className={`flex-1 rounded-[9px] py-1.5 text-xs transition-colors cursor-pointer ${
+              className={`flex-1 shrink-0 rounded-[9px] py-1.5 px-2 text-[11.5px] whitespace-nowrap transition-colors cursor-pointer ${
                 aktif ? `bg-white font-extrabold ${BM.murekkep}` : `font-semibold ${BM.gri}`
               }`}
             >

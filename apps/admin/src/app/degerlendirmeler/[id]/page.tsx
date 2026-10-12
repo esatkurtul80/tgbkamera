@@ -19,6 +19,8 @@ import {
 import { fontCss, tasarimBirlestir, type RaporTasarimAyarlari } from "@/lib/raporTasarim";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBmMagazalar } from "@/hooks/useBmMagazalar";
+import BmRaporDetay from "@/components/bm/BmRaporDetay";
+import BmPuansizRaporDetay from "@/components/bm/BmPuansizRaporDetay";
 import type { Degerlendirme, TekrarIzleme } from "@/types";
 
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -141,6 +143,20 @@ export default function DegerlendirmeRaporPage() {
   const donem = d.ay !== undefined
     ? `${AYLAR[d.ay]} ${d.yil}`
     : d.izlenmeTarihi?.toDate().toLocaleDateString("tr-TR") ?? "—";
+
+  // Bölge müdürü: puansız / yorumlu puanlı rapor için geniş kart görünümü (PDF önizlemesi yok)
+  if (bm && isPuansizNewFormat) {
+    return (
+      <BmPuansizRaporDetay d={d} sonRaporlar={sonRaporlar} takip={takip} onPdf={handlePdfIndir} pdfIndiriliyor={pdfIndiriliyor} />
+    );
+  }
+
+  // Bölge müdürü: puanlı matris raporu için telefon öncelikli özel görünüm (tablo yok)
+  if (bm && !isPuansizNewFormat && !isLegacy) {
+    return (
+      <BmRaporDetay d={d} sonRaporlar={sonRaporlar} takip={takip} onExcel={handleExcelIndir} excelIndiriliyor={excelIndiriliyor} />
+    );
+  }
 
   return (
     <div className="w-full print:max-w-full">
